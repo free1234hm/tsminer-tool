@@ -11,6 +11,8 @@ TSMiner provides a network map with extensive interactive visualization operatio
 
 ### TSMiner version v1.0.0 (11/28/2018)
 The first release version of TSMiner.
+### TSMiner version v1.1.0 (05/13/2021)
+The second version of TSMiner with two updates: (1) seperately processing positively and negatively correlated  TF-gene interactions; and (2) responding to mouse movement on the heat maps.
 
 ## Software requirements
 
