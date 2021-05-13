@@ -1,0 +1,28 @@
+#Main Input:	
+TF-gene_Interaction_Source	Cellnet_tftg.txt
+TF-gene_Interaction_File	
+Expression_Data_File	Time-series data\GSE95135.txt
+Saved_Model_File	Saved model\savedmodel
+Gene_Annotation_Source	KEGG_pathway_mus.txt
+Gene_Annotation_File	
+Normalize_Data[Log normalize data,Normalize data,No normalization/add 0]	Normalize data
+	
+#Repeat Data:	
+Repeat_Data_Files(comma delimited list)	
+Repeat_Data_is_from[Different time periods,The same time period]	The same time period
+	
+#Filtering:	
+Filter_Gene_If_It_Has_No_Static_Input_Data	FALSE
+Maximum_Number_of_Missing_Values	0
+Minimum_Correlation_between_Repeats	0
+Minimum_Absolute_Log_Ratio_Expression	1
+Change_can_be_based_on[Compare to 0,Compare to Previous,Maximum-Minimum]	Compare to Previous
+	
+#Search Options	
+Maximum_number_of_paths_out_of_split	3
+Use_TF_gene_interaction_data_to_build	TRUE
+Saved_Model[As Final/Start From/Do Not Use]	As Final
+Minimum_Standard_Deviation	0
+Threshold_of_hypergeometric_test	0.01
+Threshold_of_permutation_test	0.01
+Permutation_Test[Compare to 0/Compare to Previous]	Compare to Previous
