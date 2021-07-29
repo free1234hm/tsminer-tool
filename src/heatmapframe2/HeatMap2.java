@@ -1,0 +1,958 @@
+package heatmapframe2;
+
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseWheelEvent;
+import java.awt.event.MouseWheelListener;
+import java.awt.geom.AffineTransform;
+import java.awt.image.BufferedImage;
+
+import javax.swing.*;
+
+import bprc.nrem.GeneTable;
+import bprc.nrem.TSMinerGui_EdgeTable;
+import bprc.nrem.TSMinerGui_EdgeTable2;
+import bprc.nrem.TSMiner_Timeiohmm;
+import bprc.nrem.TSMiner_Timeiohmm.Treenode;
+
+/**
+ *
+ * <p><strong>Title:</strong> HeatMap</p>
+ *
+ * <p>Description: HeatMap is a JPanel that displays a 2-dimensional array of
+ * data using a selected color gradient scheme.</p>
+ * <p>For specifying data, the first index into the double[][] array is the x-
+ * coordinate, and the second index is the y-coordinate. In the constructor and
+ * updateData method, the 'useGraphicsYAxis' parameter is used to control 
+ * whether the row y=0 is displayed at the top or bottom. Since the usual
+ * graphics coordinate system has y=0 at the top, setting this parameter to
+ * true will draw the y=0 row at the top, and setting the parameter to false
+ * will draw the y=0 row at the bottom, like in a regular, mathematical
+ * coordinate system. This parameter was added as a solution to the problem of
+ * "Which coordinate system should we use? Graphics, or mathematical?", and
+ * allows the user to choose either coordinate system. Because the HeatMap will
+ * be plotting the data in a graphical manner, using the Java Swing framework
+ * that uses the standard computer graphics coordinate system, the user's data
+ * is stored internally with the y=0 row at the top.</p>
+ * <p>There are a number of defined gradient types (look at the static fields),
+ * but you can create any gradient you like by using either of the following 
+ * functions in the Gradient class:
+ * <ul>
+ *   <li>public static Color[] createMultiGradient(Color[] colors, int numSteps)</li>
+ *   <li>public static Color[] createGradient(Color one, Color two, int numSteps)</li>
+ * </ul>
+ * You can then assign an arbitrary Color[] object to the HeatMap as follows:
+ * <pre>myHeatMap.updateGradient(Gradient.createMultiGradient(new Color[] {Color.red, Color.white, Color.blue}, 256));</pre>
+ * </p>
+ *
+ * <p>By default, the graph title, axis titles, and axis tick marks are not
+ * displayed. Be sure to set the appropriate title before enabling them.</p>
+ *
+ * <hr />
+ * <p><strong>Copyright:</strong> Copyright (c) 2007, 2008</p>
+ *
+ * <p>HeatMap is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.</p>
+ *
+ * <p>HeatMap is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.</p>
+ *
+ * <p>You should have received a copy of the GNU General Public License
+ * along with HeatMap; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA</p>
+ *
+ * @author Matthew Beckler (matthew@mbeckler.org)
+ * @author Josh Hayes-Sheen (grey@grevian.org), Converted to use BufferedImage.
+ * @author J. Keller (jpaulkeller@gmail.com), Added transparency (alpha) support, data ordering bug fix.
+ * @version 1.6
+ */
+
+public class HeatMap2 extends JPanel{
+	JFrame theframe;
+    private double[][] data;
+    private String[] dsamplemins;
+    private String[] genelist;
+    TSMiner_Timeiohmm theTimeiohmm; 
+    TSMiner_Timeiohmm.Treenode treecopy;
+    TSMiner_Timeiohmm.Treenode currentnode;
+    TSMiner_Timeiohmm.Treenode currentparent;
+	int[] heatmap2gene;
+	int npermutationval;
+    private int[][] dataColorIndices;
+    boolean foundnode;
+    // these four variables are used to print the axis labels
+    public double zoom;
+    private int zoomPointX;
+    private int zoomPointY;
+    private int xMin;
+    private int xMax;
+    private int yMin;
+    private int yMax;
+
+    private String title;
+    private String xAxis;
+    private String yAxis;
+    int height;
+    int width;
+    int currentheatmapgene;
+    int currentgene;
+    int currentsample;
+    int currentchild;
+
+    private boolean drawTitle = false;
+    private boolean drawXTitle = false;
+    private boolean drawYTitle = false;
+    private boolean drawLegend = false;
+    private boolean drawXTicks = false;
+    private boolean drawYTicks = false;
+
+    private Color[] colors;
+    private Color bg = Color.white;
+    private Color fg = Color.black;
+
+    private BufferedImage bufferedImage;
+    private Graphics2D bufferedGraphics;
+    
+    /**
+     * @param data The data to display, must be a complete array (non-ragged)
+     * @param useGraphicsYAxis If true, the data will be displayed with the y=0 row at the top of the screen. If false, the data will be displayed with they=0 row at the bottom of the screen.
+     * @param colors A variable of the type Color[]. See also {@link #createMultiGradient} and {@link #createGradient}.
+     */
+    public HeatMap2(JFrame theframe, TSMiner_Timeiohmm theTimeiohmm, Treenode treecopy, 
+			int[] heatmap2gene, double[][] data, String[] dsamplemins, 
+    	   String[] genelist, int npermutationval, boolean useGraphicsYAxis, Color[] colors)
+    {
+        super();
+        
+        updateGradient(colors);
+        updateData(data, useGraphicsYAxis);
+
+        this.theframe = theframe;
+        this.dsamplemins = dsamplemins;
+        this.genelist = genelist;
+        this.data = data;
+        this.theTimeiohmm = theTimeiohmm;
+        this.treecopy = treecopy;
+        this.heatmap2gene = heatmap2gene;
+        this.npermutationval = npermutationval;
+        this.currentnode = treecopy;
+        this.zoom = 1;
+        
+        this.setPreferredSize(new Dimension(60+data.length, 60+data[0].length));
+        this.setDoubleBuffered(true);
+        
+        this.bg = Color.white;
+        this.fg = Color.black;
+        
+        // this is the expensive function that draws the data plot into a 
+        // BufferedImage. The data plot is then cheaply drawn to the screen when
+        // needed, saving us a lot of time in the end.
+        drawData(); 
+        addMouseMotionListener(new MouseMoved());
+        addMouseListener(new MouseList());
+        addMouseWheelListener(new MouseWheel());
+    }
+
+    /**
+     * Specify the coordinate bounds for the map. Only used for the axis labels, which must be enabled seperately. Calls repaint() when finished.
+     * @param xMin The lower bound of x-values, used for axis labels
+     * @param xMax The upper bound of x-values, used for axis labels
+     */
+    public void setCoordinateBounds(int xMin, int xMax, int yMin, int yMax)
+    {
+        this.xMin = xMin;
+        this.xMax = xMax;
+        this.yMin = yMin;
+        this.yMax = yMax;  
+        repaint();
+    }
+
+    /**
+     * Specify the coordinate bounds for the X-range. Only used for the axis labels, which must be enabled seperately. Calls repaint() when finished.
+     * @param xMin The lower bound of x-values, used for axis labels
+     * @param xMax The upper bound of x-values, used for axis labels
+     */
+    public void setXCoordinateBounds(int xMin, int xMax)
+    {
+        this.xMin = xMin;
+        this.xMax = xMax;
+        repaint();
+    }
+    
+    /**
+     * Specify the coordinate bounds for the X Min. Only used for the axis labels, which must be enabled seperately. Calls repaint() when finished.
+     * @param xMin The lower bound of x-values, used for axis labels
+     */
+    public void setXMinCoordinateBounds(int xMin)
+    {
+        this.xMin = xMin;
+        repaint();
+    }
+    
+    /**
+     * Specify the coordinate bounds for the X Max. Only used for the axis labels, which must be enabled seperately. Calls repaint() when finished.
+     * @param xMax The upper bound of x-values, used for axis labels
+     */
+    public void setXMaxCoordinateBounds(int xMax)
+    {
+        this.xMax = xMax;
+        
+        repaint();
+    }
+
+    /**
+     * Specify the coordinate bounds for the Y-range. Only used for the axis labels, which must be enabled seperately. Calls repaint() when finished.
+     * @param yMin The lower bound of y-values, used for axis labels
+     * @param yMax The upper bound of y-values, used for axis labels
+     */
+    public void setYCoordinateBounds(int yMin, int yMax)
+    {
+        this.yMin = yMin;
+        this.yMax = yMax;
+        
+        repaint();
+    }
+    
+    /**
+     * Specify the coordinate bounds for the Y Min. Only used for the axis labels, which must be enabled seperately. Calls repaint() when finished.
+     * @param yMin The lower bound of Y-values, used for axis labels
+     */
+    public void setYMinCoordinateBounds(int yMin)
+    {
+        this.yMin = yMin;
+        
+        repaint();
+    }
+    
+    /**
+     * Specify the coordinate bounds for the Y Max. Only used for the axis labels, which must be enabled seperately. Calls repaint() when finished.
+     * @param yMax The upper bound of y-values, used for axis labels
+     */
+    public void setYMaxCoordinateBounds(int yMax)
+    {
+        this.yMax = yMax;
+        
+        repaint();
+    }
+
+    /**
+     * Updates the title. Calls repaint() when finished.
+     * @param title The new title
+     */
+    public void setTitle(String title)
+    {
+        this.title = title;
+        
+        repaint();
+    }
+
+    /**
+     * Updates the state of the title. Calls repaint() when finished.
+     * @param drawTitle Specifies if the title should be drawn
+     */
+    public void setDrawTitle(boolean drawTitle)
+    {
+        this.drawTitle = drawTitle;
+        
+        repaint();
+    }
+
+    /**
+     * Updates the X-Axis title. Calls repaint() when finished.
+     * @param xAxisTitle The new X-Axis title
+     */
+    public void setXAxisTitle(String xAxisTitle)
+    {
+        this.xAxis = xAxisTitle;
+        
+        repaint();
+    }
+
+    /**
+     * Updates the state of the X-Axis Title. Calls repaint() when finished.
+     * @param drawXAxisTitle Specifies if the X-Axis title should be drawn
+     */
+    public void setDrawXAxisTitle(boolean drawXAxisTitle)
+    {
+        this.drawXTitle = drawXAxisTitle;
+        
+        repaint();
+    }
+
+    /**
+     * Updates the Y-Axis title. Calls repaint() when finished.
+     * @param yAxisTitle The new Y-Axis title
+     */
+    public void setYAxisTitle(String yAxisTitle)
+    {
+        this.yAxis = yAxisTitle;
+        
+        repaint();
+    }
+
+    /**
+     * Updates the state of the Y-Axis Title. Calls repaint() when finished.
+     * @param drawYAxisTitle Specifies if the Y-Axis title should be drawn
+     */
+    public void setDrawYAxisTitle(boolean drawYAxisTitle)
+    {
+        this.drawYTitle = drawYAxisTitle;
+        
+        repaint();
+    }
+
+
+    /**
+     * Updates the state of the legend. Calls repaint() when finished.
+     * @param drawLegend Specifies if the legend should be drawn
+     */
+    public void setDrawLegend(boolean drawLegend)
+    {
+        this.drawLegend = drawLegend;
+        
+        repaint();
+    }
+
+    /**
+     * Updates the state of the X-Axis ticks. Calls repaint() when finished.
+     * @param drawXTicks Specifies if the X-Axis ticks should be drawn
+     */
+    public void setDrawXTicks(boolean drawXTicks)
+    {
+        this.drawXTicks = drawXTicks;
+        
+        repaint();
+    }
+
+    /**
+     * Updates the state of the Y-Axis ticks. Calls repaint() when finished.
+     * @param drawYTicks Specifies if the Y-Axis ticks should be drawn
+     */
+    public void setDrawYTicks(boolean drawYTicks)
+    {
+        this.drawYTicks = drawYTicks;
+        
+        repaint();
+    }
+
+    /**
+     * Updates the foreground color. Calls repaint() when finished.
+     * @param fg Specifies the desired foreground color
+     */
+    public void setColorForeground(Color fg)
+    {
+        this.fg = fg;
+
+        repaint();
+    }
+
+    /**
+     * Updates the background color. Calls repaint() when finished.
+     * @param bg Specifies the desired background color
+     */
+    public void setColorBackground(Color bg)
+    {
+        this.bg = bg;
+
+        repaint();
+    }
+
+    /**
+     * Updates the gradient used to display the data. Calls drawData() and 
+     * repaint() when finished.
+     * @param colors A variable of type Color[]
+     */
+    public void updateGradient(Color[] colors)
+    {
+        this.colors = (Color[]) colors.clone();
+
+        if (data != null)
+        {
+            updateDataColors();
+
+            drawData();
+            repaint();
+        }
+    }
+
+    /**
+     * This uses the current array of colors that make up the gradient, and 
+     * assigns a color index to each data point, stored in the dataColorIndices
+     * array, which is used by the drawData() method to plot the points.
+     */
+    private void updateDataColors()
+    {
+
+        // dataColorIndices is the same size as the data array
+        // It stores an int index into the color array
+        dataColorIndices = new int[data.length][data[0].length];    
+
+        //assign a Color to each data point
+        for (int x = 0; x < data.length; x++)
+        {
+            for (int y = 0; y < data[0].length; y++)
+            {
+                //double norm = (data[x][y] - smallest) / range; // 0 < norm < 1
+                //System.out.println(norm+" "+data[x][y]);
+                int colorIndex = (int) Math.floor(data[x][y] * (colors.length - 1));
+               
+                dataColorIndices[x][y] = colorIndex;
+            }
+        }
+    }
+
+    /**
+     * This function generates data that is not vertically-symmetric, which
+     * makes it very useful for testing which type of vertical axis is being
+     * used to plot the data. If the graphics Y-axis is used, then the lowest
+     * values should be displayed at the top of the frame. If the non-graphics
+     * (mathematical coordinate-system) Y-axis is used, then the lowest values
+     * should be displayed at the bottom of the frame.
+     * @return double[][] data values of a simple vertical ramp
+     */
+    public static double[][] generateRampTestData()
+    {
+        double[][] data = new double[20][10];
+        for (int x = 0; x < 20; x++)
+        {
+            for (int y = 0; y < 10; y++)
+            {
+                data[x][y] = x+y;
+            }
+        }
+
+        return data;
+    }
+    
+    /**
+     * This function generates an appropriate data array for display. It uses
+     * the function: z = sin(x)*cos(y). The parameter specifies the number
+     * of data points in each direction, producing a square matrix.
+     * @param dimension Size of each side of the returned array
+     * @return double[][] calculated values of z = sin(x)*cos(y)
+     */
+    public static double[][] generateSinCosData(int dimension)
+    {
+        if (dimension % 2 == 0)
+        {
+            dimension++; //make it better
+        }
+
+        double[][] data = new double[dimension][dimension];
+        double sX, sY; //s for 'Scaled'
+
+        for (int x = 0; x < dimension; x++)
+        {
+            for (int y = 0; y < dimension; y++)
+            {
+                sX = 2 * Math.PI * (x / (double) dimension); // 0 < sX < 2 * Pi
+                sY = 2 * Math.PI * (y / (double) dimension); // 0 < sY < 2 * Pi
+                data[x][y] = Math.sin(sX) * Math.cos(sY);
+            }
+        }
+
+        return data;
+    }
+
+    /**
+     * This function generates an appropriate data array for display. It uses
+     * the function: z = Math.cos(Math.abs(sX) + Math.abs(sY)). The parameter 
+     * specifies the number of data points in each direction, producing a 
+     * square matrix.
+     * @param dimension Size of each side of the returned array
+     * @return double[][] calculated values of z = Math.cos(Math.abs(sX) + Math.abs(sY));
+     */
+    public static double[][] generatePyramidData(int dimension)
+    {
+        if (dimension % 2 == 0)
+        {
+            dimension++; //make it better
+        }
+
+        double[][] data = new double[dimension][dimension];
+        double sX, sY; //s for 'Scaled'
+
+        for (int x = 0; x < dimension; x++)
+        {
+            for (int y = 0; y < dimension; y++)
+            {
+                sX = 6 * (x / (double) dimension); // 0 < sX < 6
+                sY = 6 * (y / (double) dimension); // 0 < sY < 6
+                sX = sX - 3; // -3 < sX < 3
+                sY = sY - 3; // -3 < sY < 3
+                data[x][y] = Math.cos(Math.abs(sX) + Math.abs(sY));
+            }
+        }
+
+        return data;
+    }
+
+    /**
+     * Updates the data display, calls drawData() to do the expensive re-drawing
+     * of the data plot, and then calls repaint().
+     * @param data The data to display, must be a complete array (non-ragged)
+     * @param useGraphicsYAxis If true, the data will be displayed with the y=0 row at the top of the screen. If false, the data will be displayed with the y=0 row at the bottom of the screen.
+     */
+    public void updateData(double[][] data, boolean useGraphicsYAxis)
+    {
+        this.data = new double[data.length][data[0].length];
+        for (int ix = 0; ix < data.length; ix++)
+        {
+            for (int iy = 0; iy < data[0].length; iy++)
+            {
+                // we use the graphics Y-axis internally
+                if (useGraphicsYAxis)
+                {
+                    this.data[ix][iy] = data[ix][iy];
+                }
+                else
+                {
+                    this.data[ix][iy] = data[ix][data[0].length - iy - 1];
+                }
+            }
+        }
+
+        updateDataColors();     
+        drawData();
+        repaint();
+    }
+    
+    /**
+     * Creates a BufferedImage of the actual data plot.
+     *
+     * After doing some profiling, it was discovered that 90% of the drawing
+     * time was spend drawing the actual data (not on the axes or tick marks).
+     * Since the Graphics2D has a drawImage method that can do scaling, we are
+     * using that instead of scaling it ourselves. We only need to draw the 
+     * data into the bufferedImage on startup, or if the data or gradient
+     * changes. This saves us an enormous amount of time. Thanks to 
+     * Josh Hayes-Sheen (grey@grevian.org) for the suggestion and initial code
+     * to use the BufferedImage technique.
+     * 
+     * Since the scaling of the data plot will be handled by the drawImage in
+     * paintComponent, we take the easy way out and draw our bufferedImage with
+     * 1 pixel per data point. Too bad there isn't a setPixel method in the 
+     * Graphics2D class, it seems a bit silly to fill a rectangle just to set a
+     * single pixel...
+     *
+     * This function should be called whenever the data or the gradient changes.
+     */
+    private void drawData()
+    {
+        bufferedImage = new BufferedImage(data.length,data[0].length, BufferedImage.TYPE_INT_ARGB);
+        bufferedGraphics = bufferedImage.createGraphics();
+        //System.out.println(data.length);
+        //System.out.println(data[0].length);
+        if(currentnode != null && currentnode.ndepth > 0){
+        	if(currentnode.parent.numchildren>1){
+        		currentparent = currentnode;
+        	}else{
+        		getparents(currentnode);
+        	}
+        	int depth = Math.max(currentparent.ndepth, 1);
+        	for (int x = depth-1; x < data.length; x++){
+        		for (int y = currentparent.heatmaprange[0]; y <= currentparent.heatmaprange[1]; y++){
+        			bufferedGraphics.setColor(colors[dataColorIndices[x][y]]);
+                    bufferedGraphics.fillRect(x, y, 1, 1);
+        		}
+        	}
+        }else{
+        	for (int x = 0; x < data.length; x++)
+            {
+                for (int y = 0; y < data[0].length; y++)
+                {
+                	bufferedGraphics.setColor(colors[dataColorIndices[x][y]]);
+                	bufferedGraphics.fillRect(x, y, 1, 1);
+                }
+            }
+        }
+    }
+    
+    class MouseWheel implements MouseWheelListener {
+        @Override
+        public void mouseWheelMoved(MouseWheelEvent e) {
+            zoomPointX = e.getX();
+            zoomPointY = e.getY();
+            if (e.getPreciseWheelRotation() < 0) {
+                zoom -= 0.1;
+            } else {
+                zoom += 0.1;
+            }
+            if (zoom < 0.01) {
+                zoom = 0.01;
+            }
+            //drawData();
+            repaint();
+        }
+    }
+    
+    class MouseMoved extends MouseAdapter
+    {
+        public void mouseMoved(MouseEvent e) {
+        	double getx = e.getX();
+        	double gety = e.getY();
+        	
+        	if(getx>30 && getx<(width - 30) && gety>30 && gety<(height - 30)){
+        		int numYTicks = genelist.length;
+        		int numXTicks = dsamplemins.length;
+        		double xDist = (double)(width-60)/numXTicks; //distance between ticks
+            	double yDist = (double)(height-60)/numYTicks; //distance between ticks
+            	if(xDist>0 && yDist>0){
+            		double lx = getx - 30;
+                	double ly = gety - 30;
+            		int index = (int) Math.floor(lx/xDist);
+            		int indey = (int) Math.floor(ly/yDist);
+            		//System.out.println(getx+"\t"+gety+"\t"+index+"\t"+indey);
+            		if((currentheatmapgene != indey || currentsample != index) 
+            				&& indey<numYTicks && index<numXTicks){
+            			currentheatmapgene = indey;
+            			currentsample = index;
+            			currentgene = heatmap2gene[indey];
+            			foundnode = false;
+            			getCurrentNode(treecopy, index, indey, 0);
+            			if(!foundnode){
+            				currentnode = null;
+            				currentchild = 0;
+            			}
+            			drawData();
+                        repaint();
+            			setToolTipText(genelist[currentgene] + "; " +dsamplemins[currentsample]);
+            		}
+            	}
+        	}else{
+        		currentheatmapgene = -1;
+        		currentsample = -1;
+        		currentnode = null;
+        		currentparent = null;
+        		currentchild = 0;
+        		drawData();
+                repaint();
+        	}
+        	//JOptionPane.showMessageDialog(null,e.getX()+ "\n" + e.getY());
+        }
+    }
+    
+    class MouseList implements MouseListener
+    {
+        @Override
+        public void mouseClicked(MouseEvent e) {
+        	 if(e.getButton() == MouseEvent.BUTTON3){
+        		 javax.swing.SwingUtilities.invokeLater(new Runnable() {
+     				public void run() {
+     					JFrame frame1 = new JFrame();
+     					JDialog frame = new JDialog(frame1, "Path Table", true);
+     					frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+     					frame.setLocation(20, 50);
+     					Container theDialogContainer = frame.getContentPane();
+     					theDialogContainer.setBackground(Color.white);
+     					JTabbedPane tabbedPane = new JTabbedPane();
+     					int ndepth = currentnode.ndepth;
+     					
+     						if(currentnode.parent.numchildren>1){
+     							if(currentnode.resultTF != null){
+     								int colnum = currentnode.resultTF[0].length;
+     								if(colnum > 5){
+     									int time = (colnum-5)/2;
+         								for(int i=0;i<time;i++){
+         									String segment = theTimeiohmm.theDataSet.dsamplemins[ndepth+i];
+         									TSMinerGui_EdgeTable newContentPane1 = new TSMinerGui_EdgeTable(
+         											frame, frame1, theTimeiohmm, currentnode.parent,
+         											ndepth, currentchild, i, time, false, npermutationval);
+         									newContentPane1.setOpaque(true); // content panes must be opaque
+         									tabbedPane.addTab("TFs at "+segment, null, newContentPane1, 
+         											"TFs at "+segment);
+         								}
+     								}else{
+     									String segment = theTimeiohmm.theDataSet.dsamplemins[ndepth];
+     									TSMinerGui_EdgeTable newContentPane1 = new TSMinerGui_EdgeTable(
+     											frame, frame1, theTimeiohmm, currentnode.parent,
+     											ndepth, currentchild, 0, -1, false, npermutationval);
+     									newContentPane1.setOpaque(true); // content panes must be opaque
+     									tabbedPane.addTab("TFs at " + segment + " (no significant TF)",
+     											null, newContentPane1, "TFs at " + segment + " (no significant TF)");
+     								}
+     								theDialogContainer.add(tabbedPane);
+     		     					frame1.setContentPane(theDialogContainer);
+     		     					frame1.pack();
+     		     					frame1.setVisible(true);
+     							}else{
+     								JOptionPane.showMessageDialog(theframe,"No TF associated with this subpath");
+     							}
+     						}else{
+     							if(currentnode.deTF != null){
+     								String segment = theTimeiohmm.theDataSet.dsamplemins[ndepth];
+         							TSMinerGui_EdgeTable2 newContentPane1 = new TSMinerGui_EdgeTable2(
+         									frame, frame1, theTimeiohmm, currentnode.parent,
+         									ndepth, currentchild, false, npermutationval);
+         							newContentPane1.setOpaque(true); // content panes must be opaque
+         							if(currentnode.deTF[0].length > 5){
+         								tabbedPane.addTab("TFs at "+segment, null, 
+             									newContentPane1, "TFs at "+segment);
+         							}else{
+         								tabbedPane.addTab("TFs at "+segment + " (no significant TF)", null, 
+             									newContentPane1, "TFs at "+segment + " (no significant TF)");
+         							}
+         							theDialogContainer.add(tabbedPane);
+         	     					frame1.setContentPane(theDialogContainer);
+         	     					frame1.pack();
+         	     					frame1.setVisible(true);
+     							}else{
+     								JOptionPane.showMessageDialog(theframe,"No TF associated with this subpath");
+     							}
+     						}
+     				}
+     			});
+        	 }else if(e.getButton() == MouseEvent.BUTTON1){
+        		 javax.swing.SwingUtilities.invokeLater(new Runnable() {
+						public void run() {
+							JFrame frame = new JFrame("Table of Selected Genes");
+							frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+							frame.setLocation(20, 50);
+
+							GeneTable newContentPane = new GeneTable(
+									frame, theTimeiohmm.theDataSet, currentnode);
+
+							newContentPane.setOpaque(true); // content
+							frame.setContentPane(newContentPane);
+							frame.pack();
+							frame.setVisible(true);
+						}
+					});
+        	 }
+        	
+        }
+        
+        public void mousePressed(MouseEvent e) {
+            //System.out.println("鼠标按下");
+        }
+        @Override
+        public void mouseReleased(MouseEvent e) {
+            //System.out.println("鼠标抬起");
+        }
+        @Override
+        public void mouseEntered(MouseEvent e) {
+        	//JOptionPane.showMessageDialog(null,e.getX()+ "\n" + e.getY());
+        }
+        @Override
+        public void mouseExited(MouseEvent e) {
+            //System.out.println("鼠标出去了");
+        }
+
+        
+    }
+    
+    /**
+     * The overridden painting method, now optimized to simply draw the data
+     * plot to the screen, letting the drawImage method do the resizing. This
+     * saves an extreme amount of time.
+     */
+    public void paintComponent(Graphics g)
+    {
+        super.paintComponent(g);
+        Graphics2D g2d = (Graphics2D) g;
+        
+        width = this.getWidth();
+        height = this.getHeight();
+        int lablelength = 0;
+        for(String ll:dsamplemins){
+        	if(lablelength<ll.length()){
+        		lablelength = ll.length();
+        	}
+        }
+
+        this.setOpaque(true);
+
+        // clear the panel
+        g2d.setColor(bg);
+        g2d.fillRect(0, 0, width, height);
+        // draw the heat map
+        if (bufferedImage == null)
+        {
+            // Ideally, we only call drawData in the constructor, or if we
+            // change the data or gradients. We include this just to be safe.
+            drawData();
+        }
+        
+        /**************zoom image********************/
+        AffineTransform at = g2d.getTransform();
+        at.translate(zoomPointX, zoomPointY);
+        at.scale(zoom, zoom);
+        at.translate(-zoomPointX, -zoomPointY);
+        g2d.setTransform(at);
+        /*********************************/
+        
+        g2d.drawImage(bufferedImage, 31, 31, width - 30, height - 30, 0, 0, 
+        		bufferedImage.getWidth(), bufferedImage.getHeight(), null);
+        	
+        	drawgrid(treecopy, g2d);
+        	
+        	g2d.setStroke(new BasicStroke(1.0f));
+        	g2d.setColor(Color.BLACK);	
+        // title
+        if (drawTitle && title != null)
+        {
+        	g2d.setFont(new Font("",Font.BOLD,20));
+            g2d.drawString(title, (width / 2) - 4 * title.length(), 20);
+        }
+
+        // axis ticks - ticks start even with the bottom left coner, end very close to end of line (might not be right on)
+        int numXTicks = data.length;
+        int numYTicks = data[0].length;;
+        
+        String label = "";
+        g2d.setFont(new Font("Arial",Font.BOLD,11));
+        if(genelist != null && genelist.length>0){
+        	// Y-Axis ticks
+            if (drawYTicks)
+            {
+                int yDist = (int) ((height - 60) / (double) numYTicks); //distance between ticks
+                for (int y = 0; y < genelist.length; y++)
+                {
+                	int labelY = (int)(height - 30 - (y+0.5) * yDist);
+                    g2d.drawLine(26, labelY, 30, labelY);
+                    label = genelist[y];
+                    
+                    labelY = (int)(height - 30 - (y+0.45) * yDist);
+                    g2d.drawString(label, 3, labelY);
+                }
+            }
+        }
+        
+
+        // Y-Axis title
+        if (drawYTitle && yAxis != null)
+        {
+            //to get the text to fit nicely, we need to rotate the graphics
+            g2d.rotate(Math.PI / 2);
+            g2d.drawString(yAxis, (height / 2) - 4 * yAxis.length(), -3);
+            g2d.rotate( -Math.PI / 2);
+        }
+
+        g2d.setFont(new Font("Arial",Font.BOLD,15));
+        if(dsamplemins != null && dsamplemins.length>0 && lablelength<10){
+        	// X-Axis ticks
+            if (drawXTicks)
+            {
+            	 int xDist = (int) ((width - 60) / (double) numXTicks); //distance between ticks
+            	 for (int x = 0; x < dsamplemins.length; x++)
+                 {
+            		 label = dsamplemins[x];
+                     int labelX = (int)((31 + (x+0.5) * xDist) - 4 * label.length());
+                     //drawRotate(g2d, labelX, height - 10, 45, label);
+            		 g2d.drawString(label, labelX, height - 14);
+                 }
+            }
+        }
+
+        // X-Axis title
+        if (drawXTitle && xAxis != null)
+        {
+        	g2d.drawString(xAxis, (width / 2) - 4 * xAxis.length(), height - 40);
+        }
+
+        // Legend
+        if (drawLegend)
+        {
+            g2d.drawRect(width - 20, 30, 10, height - 60);
+            for (int y = 0; y < height - 61; y++)
+            {
+                int yStart = height - 31 - (int) Math.ceil(y * ((height - 60) / (colors.length * 1.0)));
+                yStart = height - 31 - y;
+                g2d.setColor(colors[(int) ((y / (double) (height - 60)) * (colors.length * 1.0))]);
+                g2d.fillRect(width - 19, yStart, 9, 1);
+            }
+        }
+    }
+    
+    public void getparents(Treenode ptr){
+    	if(ptr.parent != null){
+    		if(ptr.parent.numchildren > 1){
+        		currentparent = ptr;
+        	}else{
+        		getparents(ptr.parent);
+        	}
+    	}
+    }
+    
+    public void getCurrentNode(Treenode ptr, int currentx, int currenty, int child) 
+    {
+    	if(ptr != null){
+    		if(ptr.ndepth == currentx+1){
+    			int lower = ptr.heatmaprange[0];
+    			int upper = ptr.heatmaprange[1];
+    			if(currenty>=lower && currenty<=upper){
+    				foundnode = true;
+    				currentnode = ptr;
+    				currentchild = child;
+    			}
+    		}
+    	}
+    	for (int nchild = 0; nchild < ptr.numchildren; nchild++){
+    		getCurrentNode(ptr.nextptr[nchild], currentx, currenty, nchild);
+		}
+    }
+    
+    public void drawgrid(Treenode ptr, Graphics2D g2d) 
+    {
+    	if(ptr != null && ptr.parent != null && ptr.parent.numchildren>1){
+    		int numYTicks = genelist.length;
+    		int numXTicks = dsamplemins.length;
+    		double xDist =  (width - 60) / (double) numXTicks; //distance between ticks
+        	double yDist =  (height - 60) / (double) numYTicks; //distance between ticks
+        	int[] range = ptr.heatmaprange;
+        	int ndepth = ptr.ndepth;
+        	
+        	if(currentparent != null){
+        		int[] range2 = currentparent.heatmaprange;
+        		g2d.setStroke(new BasicStroke(1.5f));
+        		if(range[0] >= range2[0] && range[1] <= range2[1]){
+                	g2d.setColor(Color.WHITE);
+        		}else{
+                	g2d.setColor(Color.DARK_GRAY);
+        		}
+        		int initialx = (int)(30+(ndepth-1)*xDist);
+            	int initialy = (int)(30+yDist*range[0]);
+            	int finaly = (int)(30+yDist*(range[1]+1));
+            	g2d.drawRect(initialx, initialy, width-30-initialx, finaly-initialy);
+            	
+            	g2d.setColor(Color.DARK_GRAY);
+            	int ndepth2 = Math.max(currentparent.ndepth, 1);
+        		int initialx2 = (int)(30+(ndepth2-1)*xDist);
+            	int initialy2 = (int)(30+yDist*range2[0]);
+            	int finaly2 = (int)(30+yDist*(range2[1]+1));
+        		g2d.drawRect(initialx2, initialy2, width-30-initialx2, finaly2-initialy2);
+            	
+        	}else{
+        		g2d.setStroke(new BasicStroke(1.5f));
+            	g2d.setColor(Color.WHITE);
+            	int initialx = (int)(30+(ndepth-1)*xDist);
+            	int initialy = (int)(30+yDist*range[0]);
+            	int finaly = (int)(30+yDist*(range[1]+1));
+            	g2d.drawRect(initialx, initialy, width-30-initialx, finaly-initialy);
+            	
+            	g2d.setColor(Color.DARK_GRAY);
+            	g2d.drawRect(30, 30, width - 60, height - 60);
+        	}
+    	}
+    	for (int nchild = 0; nchild < ptr.numchildren; nchild++) {
+    		drawgrid(ptr.nextptr[nchild], g2d);
+		}
+    }
+    
+    public void drawRotate(Graphics2D g2d, double x, double y, int angle, String text) 
+    {    
+        g2d.translate((float)x,(float)y);
+        g2d.rotate(Math.toRadians(angle));
+        g2d.drawString(text,0,0);
+        g2d.rotate(-Math.toRadians(angle));
+        g2d.translate(-(float)x,-(float)y);
+    }
+    
+}
+
