@@ -190,6 +190,7 @@ public class RegulatorBindingData {
 
 	private String SZDELIM;
 	private boolean BDEBUG;
+	private boolean BFILTERBINDING;
 
 	/**
 	 * When calling this constructor, the caller must filter the data set if
@@ -200,6 +201,7 @@ public class RegulatorBindingData {
 	 * @throws IOException
 	 */
 	public RegulatorBindingData(String tfBindingDataFile,
+			String miRNABindingDataFile, boolean bfilterbinding,
 			TSMiner_DataSet theds, String szdelim, boolean bdebug,
 			String regScoreFile, String xrefFile,
 			HashMap<String, Integer> timepointMap) throws IOException {
@@ -210,6 +212,7 @@ public class RegulatorBindingData {
 		existingBindingValuesUnsorted = new HashSet<Double>();
 
 		BDEBUG = bdebug;
+		BFILTERBINDING = bfilterbinding;
 
 		numberRegs = 0;
 		timepoints = theds.numcols;
@@ -220,6 +223,7 @@ public class RegulatorBindingData {
 
 		String[] dataFiles = new String[2];
 		dataFiles[TF] = tfBindingDataFile;
+		dataFiles[MIRNA] = miRNABindingDataFile;
 
 		for (int i = 0; i < dataFiles.length; i++) {
 			if (dataFiles[i] != null && !dataFiles[i].equals("")) {
@@ -291,7 +295,76 @@ public class RegulatorBindingData {
 		}
 
 		existingBindingValuesUnsorted.add(new Double(0));
-		
+		/*
+		 * The following code loads the recorded binding data into the
+		 * gene2RegulatorBinding arrays, optionally filtering out genes from the
+		 * DataSet object for which no binding data is available.
+		 */
+		if (BFILTERBINDING) {
+			// filter those genes without binding data
+			nbinding = 0; // count of the number of genes with binding info
+			int count = 0;
+			// first determining how many genes we have binding data for
+			BindingGeneRec[] hitA = new BindingGeneRec[theds.data.length];
+			for (int nrow = 0; nrow < theds.data.length; nrow++) {
+				BindingGeneRec bgr = getBindingObject(theds.genenames[nrow],theds.probenames[nrow]);
+
+				if (bgr != null) {
+					hitA[nrow] = bgr;
+					nbinding++;
+				} else {
+					hitA[nrow] = null;
+					count++;
+				}
+			}
+
+			System.out.println("filtering " + count + " genes");
+			if (BDEBUG) {
+				System.out.println("nbinding = " + nbinding);
+			}
+
+			gene2RegBinding = new double[timepoints][nbinding][];
+			gene2RegBindingIndex = new int[timepoints][nbinding][];
+			int nbindingindex = 0;
+			System.out.println("nbinding: " + nbinding);
+			// stores whether or not should keep gene
+			bbindingdata = new boolean[theds.data.length];
+
+			// going through all data values storing into
+			// bindingpval binding values
+			// flagging for filtering those records without binding
+			for (int nrow = 0; nrow < theds.data.length; nrow++) {
+				if (hitA[nrow] != null) {
+					BindingGeneRec theBindingGeneRec = hitA[nrow];
+
+					for (int time = 0; time < timepoints; time++) {
+						gene2RegBinding[time][nbindingindex] = theBindingGeneRec.gene2RegulatorBindingRec[time];
+
+						// System.out.println("Setting index " + nbindingindex +
+						// " to "
+						// +
+						// theBindingGeneRec.gene2RegulatorBindingRecIndex[time]);
+						if (theBindingGeneRec.gene2RegulatorBindingRecIndex[time] == null)
+							System.out
+									.println("ERROR BINDING REC INDEX IS NULL");
+
+						gene2RegBindingIndex[time][nbindingindex] = theBindingGeneRec.gene2RegulatorBindingRecIndex[time];
+						for (int nindex = 0; nindex < theBindingGeneRec.gene2RegulatorBindingRec[time].length; nindex++) {
+							existingBindingValuesUnsorted
+									.add(new Double(
+											theBindingGeneRec.gene2RegulatorBindingRec[time][nindex]));
+						}
+					}
+					nbindingindex++;
+					bbindingdata[nrow] = true;
+				} else {
+					bbindingdata[nrow] = false;
+				}
+			}
+
+			System.out.println("Final nbindingindex: " + nbindingindex);
+			System.out.println();
+		} else {
 			// not filtering genes with missing p-values instead setting to 0
 			// transfering binding p-values in a hashmap to an array
 			// 0 values if do not have a p-value for that gene
@@ -319,6 +392,7 @@ public class RegulatorBindingData {
 					}
 				}
 			}
+		}
 
 		//System.out.println(existingBindingValuesUnsorted.size());
 		

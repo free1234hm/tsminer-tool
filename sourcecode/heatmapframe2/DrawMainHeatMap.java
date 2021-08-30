@@ -3,11 +3,14 @@ package heatmapframe2;
 import javax.swing.BoxLayout;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
 
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.Frame;
@@ -41,7 +44,7 @@ public class DrawMainHeatMap extends JPanel implements ActionListener {
 	JButton saveimage;
 	JButton savemodel;
 	JButton repaint;
-	HeatMap2 tfheatmap;
+	HeatMap tfheatmap;
 	int npermutationval;
 	JFrame saveModelFrame;
 
@@ -127,7 +130,7 @@ public class DrawMainHeatMap extends JPanel implements ActionListener {
 		add(buttonPanel);
 	}
 
-	public HeatMap2 getheatmap(TSMiner_Timeiohmm theTimeiohmm, Treenode treecopy, 
+	public HeatMap getheatmap(TSMiner_Timeiohmm theTimeiohmm, Treenode treecopy, 
 			int[] heatmap2gene, double[][] data, String[] dsamplemins, 
 			String[] genelist, int npermutationval) throws Exception{
         //Gradient gra = new Gradient();
@@ -142,7 +145,7 @@ public class DrawMainHeatMap extends JPanel implements ActionListener {
         //Color[] customGradient = Gradient.createMultiGradient(gradientColors, 40);
         Color[] gradientColors = new Color[]{Color.BLUE, Color.YELLOW};
         Color[] customGradient = Gradient.createMultiGradient(gradientColors, 40);
-        HeatMap2 panel = new HeatMap2(theframe, theTimeiohmm, treecopy, heatmap2gene, 
+        HeatMap panel = new HeatMap(theframe, theTimeiohmm, treecopy, heatmap2gene, 
         		data, dsamplemins, genelist, npermutationval, 
         		useGraphicsYAxis, customGradient);
         
@@ -272,23 +275,6 @@ public class DrawMainHeatMap extends JPanel implements ActionListener {
 						saveModelFrame.setExtendedState(Frame.NORMAL);
 					}
 					saveModelFrame.setVisible(true);
-				}
-			});
-		}else if(szCommand.equals("saveimage")){
-			javax.swing.SwingUtilities.invokeLater(new Runnable() {
-				public void run() {
-					if (saveImageFrame == null) {
-						saveImageFrame = new JFrame("Save as Image");
-						saveImageFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-						saveImageFrame.setLocation(400,300);
-						TSMinerGui_SaveImage newContentPane = new TSMinerGui_SaveImage(saveImageFrame, tfheatmap);
-						newContentPane.setOpaque(true);
-						saveImageFrame.setContentPane(newContentPane);
-						saveImageFrame.pack();
-					} else {
-						saveImageFrame.setExtendedState(Frame.NORMAL);
-					}
-					saveImageFrame.setVisible(true);
 				}
 			});
 		}else if(szCommand.equals("repaint")){

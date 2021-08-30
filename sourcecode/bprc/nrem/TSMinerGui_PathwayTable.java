@@ -2,8 +2,6 @@ package bprc.nrem;
 
 import bprc.core.*;
 import bprc.nrem.TSMiner_Timeiohmm.Treenode;
-import edu.umd.cs.piccolo.nodes.PPath;
-import edu.umd.cs.piccolo.PNode;
 
 import javax.swing.JDialog;
 import javax.swing.JFrame;

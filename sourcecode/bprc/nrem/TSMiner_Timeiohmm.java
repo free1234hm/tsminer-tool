@@ -13,8 +13,6 @@ import java.awt.*;
 import java.math.*;
 import java.awt.event.*;
 
-import edu.umd.cs.piccolo.nodes.PText;
-
 /**
  * This class implements the core methods for learning the TSMiner maps
  */
@@ -104,6 +102,7 @@ public class TSMiner_Timeiohmm {
 	RegulatorBindingData trainBinding;
 
 	DataSetCore miRNADataSet;
+	String miRNAInteractionDataFile = "";
 	boolean scaleTFExp; // should TF expression be scaled?
 	boolean scaleMIRNAExp; // should miRNA be used as a regulator
 	HashMap<String, Integer> reg2DataSetIndex;
@@ -210,8 +209,8 @@ public class TSMiner_Timeiohmm {
 			final JButton currentButton, String szexpname,
 			String szminstddeval, String enrichmentthreshold, String dethreshold, 
 			String szstaticsourceval, boolean scaleTFExp,
-			boolean scaleMIRNAExp, DataSetCore miRNAExpressionDataCore, 
-			String regPriors, double dProbBindingFunctional,
+			boolean scaleMIRNAExp, String miRNAInteractionDataFile,
+			DataSetCore miRNAExpressionDataCore, String regPriors, double dProbBindingFunctional,
 			double expressionScalingFactor, double minTFExpAfterScaling)
 			throws Exception {
 		this.szstaticsourceval = szstaticsourceval;
@@ -235,6 +234,7 @@ public class TSMiner_Timeiohmm {
 		this.npermutationval = npermutationval;
 		this.scaleTFExp = scaleTFExp;
 		this.scaleMIRNAExp = scaleMIRNAExp;
+		this.miRNAInteractionDataFile = miRNAInteractionDataFile;
 		this.dProbBindingFunctional = dProbBindingFunctional;
 		this.expressionScalingFactor = expressionScalingFactor;
 		this.minTFExpAfterScaling = minTFExpAfterScaling;
@@ -297,36 +297,75 @@ public class TSMiner_Timeiohmm {
 		
 		if (szbinding.equals("")) {
 			BREGTSMiner = true;
-		} else if(!bfilterbinding){
-
-			bindingData = new RegulatorBindingData(szbinding, theDataSet, 
-					SZDELIM, BDEBUG, regPriors, null, timepointName2Int);
+		} else {
+			String mirnaFileToPass = "";
+			if (bstaticsearchval) mirnaFileToPass = miRNAInteractionDataFile;
+			bindingData = new RegulatorBindingData(szbinding, mirnaFileToPass,
+					bfilterbinding, theDataSet, SZDELIM, BDEBUG, regPriors,
+					null, timepointName2Int);
 			
-			regname2index();
-			
-			bindingData.adjustBindingData(reg2DataSetIndex, theDataSet, miRNADataSet, 
-					scaleMIRNAExp, scaleTFExp, expressionScalingFactor, minTFExpAfterScaling);
-			
-			numbits = bindingData.numberRegs; //TFs number
-			dMaxTFActivityScore = new double[numbits]; //A matrix saving the Maximum score of each TF
-			for (int ntf = 0; ntf < bindingData.numberRegs; ntf++) {
-				dMaxTFActivityScore[ntf] = 0;
+			//Read the TFs data and Create a hash map that takes regs and maps them to their row in
+			// the exp data
+			reg2DataSetIndex = new HashMap<String, Integer>();   //TF name to its index in theDataSet  
+			geneToDataSetIndex = new HashMap<String, Integer>(); //Gene name to its index in theDataSet
+			for (int i = 0; i < theDataSet.genenames.length; i++) geneToDataSetIndex.put(theDataSet.genenames[i].toUpperCase(),new Integer(i));
+			for (int i = 0; i < bindingData.regNames.length; i++) {
+				String upCaseReg = bindingData.regNames[i].toUpperCase();
+				if (geneToDataSetIndex.containsKey(upCaseReg.split("_")[0])) {
+					reg2DataSetIndex.put(upCaseReg, geneToDataSetIndex.get(upCaseReg.split("_")[0]));
+				} else {
+					HashSet<String> syns = bindingData.regSyns.get(upCaseReg);
+					boolean found = false;
+					if (syns != null) {
+						for (String syn : syns) {
+							if (geneToDataSetIndex.containsKey(syn.split("_")[0])) {
+								if (found) {
+									throw new Exception(
+											"Multiple syns for "
+													+ bindingData.regNames[i]
+													+ ",a regulator in the"
+													+ " binding data, are in the expression data.");
+								}
+								reg2DataSetIndex.put(upCaseReg,geneToDataSetIndex.get(syn.split("_")[0]));
+								found = true;
+							}
+						}
+					}
+				}
 			}
-		}else{
-			bindingData = new RegulatorBindingData(szbinding, theDataSet, 
-					SZDELIM, BDEBUG, regPriors, null, timepointName2Int);
-			regname2index();
-			bindingData.adjustBindingData(reg2DataSetIndex, theDataSet, miRNADataSet, 
-					scaleMIRNAExp, scaleTFExp, expressionScalingFactor, minTFExpAfterScaling);
-			theDataSet = filternotf(theDataSet, bindingData);
 			
-			bindingData = new RegulatorBindingData(szbinding, theDataSet, 
-					SZDELIM, BDEBUG, regPriors, null, timepointName2Int);
-			regname2index();
-			bindingData.adjustBindingData(reg2DataSetIndex, theDataSet, miRNADataSet, 
-					scaleMIRNAExp, scaleTFExp, expressionScalingFactor, minTFExpAfterScaling);
+			raw_reg2DataSetIndex = new HashMap<String, Integer>();   //TF name to its index in the raw DataSet  
+			raw_geneToDataSetIndex = new HashMap<String, Integer>(); //Gene name to its index in the raw DataSet
+			for (int i = 0; i < rawDataSet.genenames.length; i++) raw_geneToDataSetIndex.put(rawDataSet.genenames[i].toUpperCase(),new Integer(i));
+			for (int i = 0; i < bindingData.regNames.length; i++) {
+				String upCaseReg = bindingData.regNames[i].toUpperCase();
+				if (raw_geneToDataSetIndex.containsKey(upCaseReg.split("_")[0])) {
+					raw_reg2DataSetIndex.put(upCaseReg, raw_geneToDataSetIndex.get(upCaseReg.split("_")[0]));
+				} else {
+					HashSet<String> syns = bindingData.regSyns.get(upCaseReg);
+					boolean found = false;
+					if (syns != null) {
+						for (String syn : syns) {
+							if (raw_geneToDataSetIndex.containsKey(syn.split("_")[0])) {
+								if (found) {
+									throw new Exception(
+											"Multiple syns for "
+													+ bindingData.regNames[i]
+													+ ",a regulator in the"
+													+ " binding data, are in the expression data.");
+								}
+								raw_reg2DataSetIndex.put(upCaseReg,raw_geneToDataSetIndex.get(syn.split("_")[0]));
+								found = true;
+							}
+						}
+					}
+				}
+			}
 			
 			numbits = bindingData.numberRegs; //TFs number
+			bindingData.adjustBindingData(reg2DataSetIndex, theDataSet, miRNADataSet, 
+					scaleMIRNAExp, scaleTFExp, expressionScalingFactor, minTFExpAfterScaling);
+			buildFilteredClassifier();
 			dMaxTFActivityScore = new double[numbits]; //A matrix saving the Maximum score of each TF
 			for (int ntf = 0; ntf < bindingData.numberRegs; ntf++) {
 				dMaxTFActivityScore[ntf] = 0;
@@ -587,87 +626,6 @@ public class TSMiner_Timeiohmm {
 			outputTF(treeptr, 0, path);
 		}
 		
-	}
-	
-	public TSMiner_DataSet filternotf(TSMiner_DataSet theDataSet, 
-			RegulatorBindingData bindingData) {
-		int numrows = theDataSet.numrows;
-		boolean[] goodrow = new boolean[numrows];
-		int ngoodrows = 0;
-
-		for (int nrow = 0; nrow < numrows; nrow++) {
-			int[] tf = bindingData.gene2RegBindingIndex[0][nrow];
-			if (tf != null && tf.length > 0) {
-				goodrow[nrow] = true;
-				ngoodrows++;
-			} else {
-				goodrow[nrow] = false;
-			}
-		}
-		TSMiner_DataSet theDataSetsMerged = theDataSet;
-		theDataSetsMerged = new TSMiner_DataSet(theDataSetsMerged.filtergenesgeneral(goodrow, ngoodrows, false),
-				theDataSetsMerged.tga);
-		return theDataSetsMerged;
-	}
-	
-	private void regname2index() throws Exception{
-		//Read the TFs data and Create a hash map that takes regs and maps them to their row in
-		// the exp data
-		reg2DataSetIndex = new HashMap<String, Integer>();   //TF name to its index in theDataSet  
-		geneToDataSetIndex = new HashMap<String, Integer>(); //Gene name to its index in theDataSet
-		for (int i = 0; i < theDataSet.genenames.length; i++) geneToDataSetIndex.put(theDataSet.genenames[i].toUpperCase(),new Integer(i));
-		for (int i = 0; i < bindingData.regNames.length; i++) {
-			String upCaseReg = bindingData.regNames[i].toUpperCase();
-			if (geneToDataSetIndex.containsKey(upCaseReg.split("_")[0])) {
-				reg2DataSetIndex.put(upCaseReg, geneToDataSetIndex.get(upCaseReg.split("_")[0]));
-			} else {
-				HashSet<String> syns = bindingData.regSyns.get(upCaseReg);
-				boolean found = false;
-				if (syns != null) {
-					for (String syn : syns) {
-						if (geneToDataSetIndex.containsKey(syn.split("_")[0])) {
-							if (found) {
-								throw new Exception(
-										"Multiple syns for "
-												+ bindingData.regNames[i]
-												+ ",a regulator in the"
-												+ " binding data, are in the expression data.");
-							}
-							reg2DataSetIndex.put(upCaseReg,geneToDataSetIndex.get(syn.split("_")[0]));
-							found = true;
-						}
-					}
-				}
-			}
-		}
-		
-		raw_reg2DataSetIndex = new HashMap<String, Integer>();   //TF name to its index in the raw DataSet  
-		raw_geneToDataSetIndex = new HashMap<String, Integer>(); //Gene name to its index in the raw DataSet
-		for (int i = 0; i < rawDataSet.genenames.length; i++) raw_geneToDataSetIndex.put(rawDataSet.genenames[i].toUpperCase(),new Integer(i));
-		for (int i = 0; i < bindingData.regNames.length; i++) {
-			String upCaseReg = bindingData.regNames[i].toUpperCase();
-			if (raw_geneToDataSetIndex.containsKey(upCaseReg.split("_")[0])) {
-				raw_reg2DataSetIndex.put(upCaseReg, raw_geneToDataSetIndex.get(upCaseReg.split("_")[0]));
-			} else {
-				HashSet<String> syns = bindingData.regSyns.get(upCaseReg);
-				boolean found = false;
-				if (syns != null) {
-					for (String syn : syns) {
-						if (raw_geneToDataSetIndex.containsKey(syn.split("_")[0])) {
-							if (found) {
-								throw new Exception(
-										"Multiple syns for "
-												+ bindingData.regNames[i]
-												+ ",a regulator in the"
-												+ " binding data, are in the expression data.");
-							}
-							raw_reg2DataSetIndex.put(upCaseReg,raw_geneToDataSetIndex.get(syn.split("_")[0]));
-							found = true;
-						}
-					}
-				}
-			}
-		}
 	}
 	
 	public void ESpermute(Treenode treehmm, int ndepth, int[] path){
@@ -1274,6 +1232,125 @@ public class TSMiner_Timeiohmm {
 		if (BDEBUG) {
 			System.out.println("[[[]]]" + DEFAULTSIGMA);
 			System.out.println();
+		}
+	}
+
+	///////////////////////////////////////////////////
+	/**
+	 * Uses TSMiner_NaiveBayes to build a classifier which predicts given the set
+	 * of transcription factors predicted to regulate a gene whether it would
+	 * appear filtered or not
+	 */
+	public void buildFilteredClassifier() {
+		
+		Iterator<String> itrgenes = theDataSet.htFiltered.keySet().iterator(); //根据表达水平已经删除的基因
+		int numfiltered = theDataSet.htFiltered.size();
+
+		int[][] filteredinput = new int[numfiltered][];
+		int[][] filteredinputIndex = new int[numfiltered][];
+
+		int nfilteredhits = 0;
+		int[] ALLZEROES = new int[0];
+
+		int nindex = 0;
+		while (itrgenes.hasNext()) {
+			String szgene = itrgenes.next();
+			String szprobe = (String)theDataSet.htFiltered.get(szgene);
+
+			Integer rbdindex = geneToDataSetIndex.get(szgene);
+			if (rbdindex == null) rbdindex = geneToDataSetIndex.get(szprobe);
+			
+			
+
+			if (rbdindex != null) {
+				int[] filteredGeneRecInput = new int[bindingData.gene2RegMaxBinding[rbdindex].length];
+				for (int i = 0; i < bindingData.gene2RegMaxBinding[rbdindex].length; i++) {
+					if (bindingData.gene2RegMaxBinding[rbdindex][i] > 0)
+						filteredGeneRecInput[i] = 1;
+					else if (bindingData.gene2RegMaxBinding[rbdindex][i] < 0)
+						filteredGeneRecInput[i] = -1;
+					else
+						filteredGeneRecInput[i] = 0;
+				}
+				filteredinput[nindex] = filteredGeneRecInput;
+				filteredinputIndex[nindex] = bindingData.gene2RegMaxBindingIndex[rbdindex];
+				nfilteredhits++;
+			} else {
+				if (!bfilterbinding) {
+					// not filtering binding using all zeros insted
+					filteredinput[nindex] = ALLZEROES;
+					filteredinputIndex[nindex] = ALLZEROES; // really empty
+				} else {
+					filteredinput[nindex] = null;
+					filteredinputIndex[nindex] = null;
+				}
+			}
+			nindex++;
+		}
+
+		
+		
+		int nfinalfilter;
+		if (bfilterbinding) {
+			nfinalfilter = nfilteredhits;
+		} else {
+			nfinalfilter = numfiltered;  //不根据tf删除基因，因此最终删除依旧是根据表达谱删除的结果
+		}
+
+		ntotalcombined = bindingData.gene2RegMaxBinding.length + nfinalfilter; //总基因数
+
+		
+		
+		if (BDEBUG) {
+			System.out.println(bindingData.gene2RegMaxBinding.length
+					+ " $$$$$$$$$$ " + nfinalfilter);
+		}
+		// making new array with filtered and non-filtered
+		// need to do this TF wise
+		int[][] combinedbinding = new int[ntotalcombined][];
+		int[][] combinedbindingIndex = new int[ntotalcombined][];
+		int[] filteredlabel = new int[ntotalcombined];  //未删除基因值为1，后面删除基因值为0
+		double[] trainweight = new double[ntotalcombined];
+		
+		for (int ni = 0; ni < bindingData.gene2RegMaxBinding.length; ni++) {
+			filteredlabel[ni] = 1;
+			combinedbinding[ni] = new int[bindingData.gene2RegMaxBinding[ni].length];
+			for (int i = 0; i < combinedbinding[ni].length; i++) {
+				combinedbinding[ni][i] = (int) Math.signum(bindingData.gene2RegMaxBinding[ni][i]);
+			}
+			combinedbindingIndex[ni] = bindingData.gene2RegMaxBindingIndex[ni];
+		}
+
+		for (int ni = bindingData.gene2RegMaxBinding.length; ni < filteredlabel.length; ni++) {
+			filteredlabel[ni] = 0;
+		}
+
+		int nfilteredindex = 0;
+		int ntotalindex = bindingData.gene2RegMaxBinding.length;
+		while ((nfilteredindex < filteredinput.length)
+				&& (ntotalindex < combinedbinding.length)) {
+			if (filteredinput[nfilteredindex] != null) {
+				combinedbinding[ntotalindex] = filteredinput[nfilteredindex];
+				combinedbindingIndex[ntotalindex] = filteredinputIndex[nfilteredindex];
+				ntotalindex++;
+			}
+			nfilteredindex++;
+		}
+
+		for (int ni = 0; ni < trainweight.length; ni++) {
+			trainweight[ni] = 1;
+		}
+		
+		if (bindingData.signedBindingValuesSorted.length > 0) {
+			filteredClassifier = new TSMiner_NaiveBayes(combinedbinding,
+					combinedbindingIndex, numbits, filteredlabel,
+					bindingData.signedBindingValuesSorted, 2);
+		} else {
+			filteredClassifier = null;
+		}
+		
+		if (BDEBUG) {
+			System.out.println(filteredClassifier);
 		}
 	}
 
@@ -2870,11 +2947,6 @@ public class TSMiner_Timeiohmm {
 		public Treenode[] nextptr;
 		/** pointer back to the parent */
 		public Treenode parent;
-
-		PText thepredictText;
-		PText goText;
-		PText genesetText;
-		PText tfsetText;
 		/**
 		 * forward variable for current variables <br>
 		 * p(x_1,...,x_i,pi_i=k)
@@ -2966,7 +3038,6 @@ public class TSMiner_Timeiohmm {
 			tnode.dPsum = dPsum;
 			tnode.nprime = nprime;
 			tnode.numchildren = numchildren;
-			tnode.thepredictText = thepredictText;
 			tnode.parent = null;
 			tnode.bchange = bchange;
 			tnode.df = df;
@@ -3302,10 +3373,6 @@ public class TSMiner_Timeiohmm {
 				nf1.setMaximumFractionDigits(1);
 			}
 			node.dpredictweight = dweight;
-
-			if (node.thepredictText != null) {
-				node.thepredictText.setText(nf1.format(dweight));
-			}
 
 			meanpredict[nstep] += dweight * node.dmean;
 			varpredict[nstep] += Math.pow(dweight * node.dsigma, 2);

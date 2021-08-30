@@ -26,14 +26,16 @@ public class TSMiner_DataSet extends DataSetCore {
 	 * in the content of szInputFile
 	 */
 	public TSMiner_DataSet(String szInputFile, int nmaxmissing,
-			double dthresholdvalue, boolean btakelog,
+			double dthresholdvalue, double dmincorrelation, boolean btakelog,
 			boolean bspotincluded, boolean brepeatset, boolean badd0,
-			boolean bmaxminval, boolean bfcto0, boolean bfctopre)
+			boolean bmaxminval, boolean bfcto0, boolean bfctopre, boolean bfullrepeat)
 			throws IOException, FileNotFoundException, IllegalArgumentException {
 		
 		this.szInputFile = szInputFile;
+		this.bfullrepeat = bfullrepeat;
 		this.nmaxmissing = nmaxmissing;
 		this.dthresholdvalue = dthresholdvalue;
+		this.dmincorrelation = dmincorrelation;
 		this.bmaxminval = bmaxminval;
 		this.bfcto0 = bfcto0;
 		this.bfctopre = bfctopre;
@@ -43,6 +45,6 @@ public class TSMiner_DataSet extends DataSetCore {
 
 		//调用datasetreader方法
 		dataSetReader(szInputFile, nmaxmissing, dthresholdvalue,
-				btakelog, bspotincluded, brepeatset, badd0);
+				dmincorrelation, btakelog, bspotincluded, brepeatset, badd0);
 	}
 }

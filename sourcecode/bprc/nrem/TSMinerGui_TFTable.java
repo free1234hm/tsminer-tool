@@ -1,8 +1,6 @@
 package bprc.nrem;
 
 import bprc.core.*;
-import edu.umd.cs.piccolo.nodes.PPath;
-import edu.umd.cs.piccolo.PNode;
 
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -61,10 +59,10 @@ public class TSMinerGui_TFTable extends JPanel implements ActionListener {
 	JButton copyButton2;
 	JButton saveButton2;
 	JButton pathwayButton;
-	JLabel l1 = new JLabel("Minimum number of pathway genes interacting with the selected TF(s): ");
-	JLabel l2 = new JLabel("Minimum percentage of pathway genes interacting with the selected TF(s): ");
+	JLabel l1 = new JLabel("Minimum number of pathway genes interacted with the selected TFs: ");
+	JLabel l2 = new JLabel("Minimum percentage of pathway genes interacted with the selected TFs: ");
 	JLabel l4 = new JLabel("%");
-	JLabel l3 = new JLabel("Find the pathways interacting with the selected TF(s) ");
+	JLabel l3 = new JLabel("Find the pathways associated with the selected TFs ");
 	JSpinner j1, j2;
 	int mininumber = 20;
 	int minipersentage = 50;

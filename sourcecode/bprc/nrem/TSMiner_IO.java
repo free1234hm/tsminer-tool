@@ -1,14 +1,11 @@
 package bprc.nrem;
 
 import bprc.core.*;
-
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
-
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
-
 import java.util.*;
 
 /**
@@ -168,6 +165,7 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 	boolean bfontoval;
 	String szmaxmissingval;
 	String szexpressval;
+	String szfilterthresholdval;
 	String szlbval;
 	String szalphaval;
 	String szpercentileval;
@@ -206,6 +204,8 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 	boolean bfcto0;
 	boolean bfctopre;
 
+	boolean balltimemiRNA = false;
+	boolean balltime = false;
 	boolean bspotincluded;
 	boolean badd0 = false;
 
@@ -256,6 +256,8 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 	JCheckBox xrefcheck = new JCheckBox("Cross References", false);
 	JDialog executeDialognf = null;
 	
+
+	ListDialog miRNARepeatList;
 	JButton miRNARepeatHButton = new JButton(Util.createImageIcon("Help16.gif"));
 
 	ButtonGroup miRNAnormGroup = new ButtonGroup();
@@ -314,6 +316,7 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 
 
 	JButton orig2Button = new JButton("Browse...", Util.createImageIcon("Open16.gif"));
+	JButton miRNARepeatButton = new JButton("miRNA Repeat Data...", Util.createImageIcon("Open16.gif"));
 	JButton infoButton = new JButton(Util.createImageIcon("About16.gif"));
 
 
@@ -332,11 +335,13 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 
 	JCheckBox thelogcheck;
 	JDialog theOptions;
+	ListDialog theRepeatList;
 	String szClusterA = "Execute";
 	
 	JButton tfgenebutton= new JButton();
 	JButton savedmodelbutton= new JButton();
 	JButton timeseriesbutton= new JButton();
+	JButton repeatButton= new JButton();
 	JButton gobutton= new JButton();
 
 	JButton help1= new JButton(Util.createImageIcon("Help16.gif"));
@@ -353,11 +358,12 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 	JTextField orig1Field;
 	JTextField goFileField;
 	
-	JCheckBox jc = new JCheckBox("Filter gene if it has no binding TF");
-	final JSpinner j13;
-	final JSpinner j15;
 	String labels11[] = { "Log normalize data", "Normalize data", "No Normalization/add 0"};
 	JComboBox comboBox3 = new JComboBox(labels11);
+	JCheckBox jc = new JCheckBox("Filter gene if it has no binding TF");
+	final JSpinner j13;
+	final JSpinner j14;
+	final JSpinner j15;
 	
 	JRadioButton mmm1=new JRadioButton("Maximum-minimum",false); 
     JRadioButton mmm2=new JRadioButton("Compare to 0",true);
@@ -468,9 +474,19 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 		j3.setBounds(15,190,300,35);
 		JLabel j33=new JLabel("Saved Model File (Optional):");
 		j33.setBounds(15,158,300,35);
+		JLabel j4=new JLabel("Normalization Method:");
+		j4.setBounds(15,222,300,35);
 		
 		staticsourcecb.setBounds(200, 32, 250, 25);
         gosourcecb.setBounds(200, 96, 250, 25);
+		comboBox3.setBounds(200,224,200,25);
+        if (nnormalizeDEF == 0) {
+        	comboBox3.setSelectedIndex(0);
+		} else if (nnormalizeDEF == 1) {
+			comboBox3.setSelectedIndex(1);
+		} else {
+			comboBox3.setSelectedIndex(2);
+		}
 		
 		staticFileField=new JTextField(szStaticFileDEF, JLabel.TRAILING);
 		staticFileField.setBounds(200,64,500,25);
@@ -515,23 +531,35 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 		timeseriesbutton.setHideActionText(true);
 		timeseriesbutton.addActionListener(this);
 		timeseriesbutton.setBounds(705,192,100,25);
+
+		repeatButton.setText("Repeat Data");
+		repeatButton.setHideActionText(true);
+		repeatButton.addActionListener(this);
+		defaultColor = repeatButton.getBackground();
+		if (TSMiner_IO.vRepeatFilesDEF.size() >= 1) {
+			repeatButton.setBackground(ListDialog.buttonColor);
+		}
+		repeatButton.setBounds(810,192,120,25);
 		
 		help1.addActionListener(this);
-		help1.setBounds(920,192,40,25);
+		help1.setBounds(920,224,40,25);
 
 		panel1.setLayout(null);
 		panel1.add(j1); 
 		panel1.add(j2); 
 		panel1.add(j3); 
 		panel1.add(j33);
+		panel1.add(j4);
 		panel1.add(staticFileField);
 		panel1.add(initfileField);
 		panel1.add(orig1Field);
 		panel1.add(staticsourcecb);
 		staticsourcecb.setSelectedIndex(nstaticsourceDEF);
+		panel1.add(comboBox3);
 		panel1.add(tfgenebutton);
 		panel1.add(savedmodelbutton);
 		panel1.add(timeseriesbutton);
+		panel1.add(repeatButton);
 		
 		panel1.add(j7);
 		panel1.add(gosourcecb);
@@ -542,7 +570,7 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 		panel1.add(help1);
 
         JScrollPane   scrollpanel1   =   new   JScrollPane(panel1, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        scrollpanel1.setBounds(100, 100, 1040, 120);
+        scrollpanel1.setBounds(100, 100, 1040, 140);
 		panel1.setPreferredSize(new Dimension(scrollpanel1.getWidth() - 50, scrollpanel1.getHeight()*2));
 		/*******************************************************/
 		JPanel panel3=new JPanel();
@@ -559,32 +587,24 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 		
 		jc.setBounds(10,15,300,35);
 		if(bfilterstaticDEF) jc.setSelected(true);
-		JLabel j4=new JLabel("Normalization Method:");
 		JLabel j9=new JLabel("Maximum number of missing values:");
+		JLabel j10=new JLabel("Minimum correlation between repeats:");
 		JLabel j11=new JLabel("Minimum absolute expression change:");
 		JLabel j12=new JLabel("Change can be based on:");
-		
-		j4.setBounds(10,45,300,35);
-		j9.setBounds(10,75,300,35);
+		j9.setBounds(10,45,300,35);
+		j10.setBounds(10,75,300,35);
 		j11.setBounds(10,105,300,35);
 		j12.setBounds(10,135,300,35);
-		
-		comboBox3.setBounds(150,50,160,25);
-        if (nnormalizeDEF == 0) {
-        	comboBox3.setSelectedIndex(0);
-		} else if (nnormalizeDEF == 1) {
-			comboBox3.setSelectedIndex(1);
-		} else {
-			comboBox3.setSelectedIndex(2);
-		}
-        
+
 		SpinnerNumberModel missingvalue = new SpinnerNumberModel(new Integer(nMaxMissingDEF), new Integer(0), null, new Integer(1));
 		j13 = new JSpinner(missingvalue);	
-		j13.setBounds(240,80,45,23);
+		j13.setBounds(270,50,45,23);		
+		SpinnerNumberModel corre = new SpinnerNumberModel(new Double(dMinCorrelationRepeatsDEF), new Double(0), null, new Double(0.05));
+		j14 = new JSpinner(corre);	
+		j14.setBounds(270,80,45,23);
 		SpinnerNumberModel snmodelExpress = new SpinnerNumberModel(new Double(dMinExpressionDEF), new Double(0.0), null, new Double(0.1));
 		j15=new JSpinner(snmodelExpress);
-		j15.setBounds(240,110,45,23);
-		
+		j15.setBounds(270,110,45,23);
 		mmm2.setBounds(10,165,120,32);
 	    mmm3.setBounds(135,165,170,32);
 	    mmm1.setBounds(305,165,155,32); 
@@ -611,12 +631,12 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 		
 		panel31.setLayout(null);
 		panel31.add(jc);
-		panel31.add(j4);
 		panel31.add(j9);
-		panel31.add(comboBox3);
+		panel31.add(j10);
 		panel31.add(j11);
 		panel31.add(j12);
 		panel31.add(j13);
+		panel31.add(j14);
 		panel31.add(j15);
 		panel31.add(mmm1);
 		panel31.add(mmm2);
@@ -673,13 +693,13 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 		j21 = new JSpinner(snminstddev);
 		j21.setBounds(205,50,45,23);
 		
-		JLabel threshold=new JLabel("Significance level of enrichment p-value:");
+		JLabel threshold=new JLabel("Significance level of enrichment q-value:");
 		threshold.setBounds(10,135,300,32);
 		SpinnerNumberModel pthreshold = new SpinnerNumberModel(new Double(dPvalueshold), new Double(0), null, new Double(0.01));
 		j22 = new JSpinner(pthreshold);
 		j22.setBounds(245,140,45,23);
 		
-		JLabel threshold2=new JLabel("and DE p-value:");
+		JLabel threshold2=new JLabel("and DE q-value:");
 		threshold2.setBounds(295,135,300,32);
 		SpinnerNumberModel pthreshold2 = new SpinnerNumberModel(new Double(dPvalueshold2), new Double(0), null, new Double(0.01));
 		j23 = new JSpinner(pthreshold2);
@@ -734,7 +754,7 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 		
 		JPanel panel4=new JPanel();
 		panel4.setPreferredSize(new Dimension(900, 180));
-		panel4.setBorder(new TitledBorder(null,"Train Model",TitledBorder.LEFT,TitledBorder.TOP));
+		panel4.setBorder(new TitledBorder(null,"Search Model",TitledBorder.LEFT,TitledBorder.TOP));
 		panel4.setLayout(new BorderLayout());
 		runtext=new JTextArea();
 		runtext.setLineWrap(true);
@@ -765,6 +785,13 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 		contentPane.add(scrollpanel2);
 		contentPane.add(panel4);
 		contentPane.add(panel5);
+
+		theRepeatList = new ListDialog(this, TSMiner_IO.vRepeatFilesDEF,
+				TSMiner_IO.balltimeDEF, repeatButton, TSMiner_IO.defaultColor,
+				TSMiner_IO.defaultColor, TSMiner_IO.fc);
+		miRNARepeatList = new ListDialog(this, TSMiner_IO.miRNARepeatFilesDEF,
+				TSMiner_IO.miRNAalltimeDEF, miRNARepeatButton, TSMiner_IO.defaultColor,
+				TSMiner_IO.defaultColor, TSMiner_IO.fc);
 	}
 
 	/**
@@ -1334,29 +1361,153 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 			String szorganismsourceval, String szxrefsourceval,
 			String szxrefval, String szexp1val, String szgoval,
 			String szgocategoryval, int nmaxmissing, double dexpressedval,
-			int nsamplespval, int nmingo, int nmingolevel, String szextraval,
-			boolean btakelog, boolean bspotincluded, boolean badd0, String szcategoryIDval,
+			double dmincorrelation, int nsamplespval, int nmingo,
+			int nmingolevel, String szextraval, boolean balltime,
+			Vector<String> repeatnames, boolean btakelog,
+			boolean bspotincluded, boolean badd0, String szcategoryIDval,
 			String szevidenceval, String sztaxonval, boolean bpontoval,
 			boolean bcontoval, boolean bfontoval, boolean brandomgoval,
 			boolean bmaxminval, boolean bfcto0, boolean bfctopre) throws Exception {
-		    TSMiner_DataSet theDataSetsMerged = null;
+		TSMiner_DataSet theDataSetsMerged = null;
 		
+		if (balltime) {
 			TSMiner_DataSet theDataSet1 = new TSMiner_DataSet(szexp1val, nmaxmissing,
-					dexpressedval, btakelog, bspotincluded,
-					false, badd0, bmaxminval, bfcto0, bfctopre);
+					dexpressedval, dmincorrelation, btakelog, bspotincluded,
+					false, badd0, bmaxminval, bfcto0, bfctopre, balltime);
 
-			if (theDataSet1.numcols > 1) {
-				theDataSetsMerged = theDataSet1;
+			if (theDataSet1.numcols <= 1) {
+				theDataSet1 = new TSMiner_DataSet(theDataSet1.filterDuplicates(),
+						new TSMiner_GoAnnotations(szorganismsourceval,
+								szxrefsourceval, szxrefval, szgoval,
+								szgocategoryval, theDataSet1.genenames,
+								theDataSet1.probenames, nsamplespval, nmingo,
+								nmingolevel, szextraval, szcategoryIDval,
+								bspotincluded, szevidenceval, sztaxonval,
+								bpontoval, bcontoval, bfontoval, brandomgoval));
+
+				TSMiner_DataSet theDataSet1fm;
+				if (theDataSet1.numcols == 1) {
+					theDataSet1fm = new TSMiner_DataSet(theDataSet1.filterMissing1point(), theDataSet1.tga);
+					theDataSet1fm = new TSMiner_DataSet(theDataSet1fm.filtergenesthreshold1point(), theDataSet1fm.tga);
+				} else {theDataSet1fm = theDataSet1;
+				}
+				return theDataSet1fm;
+			} else {
+				String[] origgenes = theDataSet1.genenames;
+				theDataSet1 = new TSMiner_DataSet(theDataSet1.logratio2(),theDataSet1.tga);
+				theDataSet1 = new TSMiner_DataSet(theDataSet1.averageAndFilterDuplicates(), theDataSet1.tga);
+
+				// genevalues in log ratio before averaging stored
+				// need for each gene duplicated
+				// a mutlidimensional array of time series for each occurence
+
+				int numrepeats = repeatnames.size();
+
+				if (numrepeats > 0) {
+					TSMiner_DataSet[] repeatSets = new TSMiner_DataSet[numrepeats];
+					for (int nset = 0; nset < numrepeats; nset++) {
+						String szfile = (String) repeatnames.get(nset);
+
+						TSMiner_DataSet theOtherSet = new TSMiner_DataSet(szfile,
+								nmaxmissing, dexpressedval, dmincorrelation,
+								btakelog, bspotincluded, true, badd0,
+								bmaxminval, bfcto0, bfctopre, balltime);
+						errorcheck(origgenes, theOtherSet.genenames,
+								theDataSet1.numcols, theOtherSet.numcols);
+						// compute log ratio of each time series first then
+						// merge
+						// normalize the data
+						theOtherSet = new TSMiner_DataSet(theOtherSet.logratio2(),
+								theOtherSet.tga);
+						theOtherSet = new TSMiner_DataSet(theOtherSet
+								.averageAndFilterDuplicates(), theOtherSet.tga);
+						// gene values in log ratio before averaging stored
+						repeatSets[nset] = theOtherSet;
+					}
+					theDataSetsMerged = new TSMiner_DataSet(theDataSet1.mergeDataSets(repeatSets), theDataSet1.tga);
+					theDataSetsMerged = new TSMiner_DataSet(theDataSetsMerged.filterdistprofiles(theDataSet1, repeatSets),
+							theDataSetsMerged.tga);
+				} else {
+					theDataSetsMerged = theDataSet1;
+				}
+
+				theDataSetsMerged = new TSMiner_DataSet(theDataSetsMerged.filterMissing(), theDataSetsMerged.tga);
+				theDataSetsMerged = new TSMiner_DataSet(theDataSetsMerged.filtergenesthreshold2(), theDataSetsMerged.tga);
+
+				theDataSetsMerged.tga = new TSMiner_GoAnnotations(
+						szorganismsourceval, szxrefsourceval, szxrefval,
+						szgoval, szgocategoryval, theDataSet1.genenames,
+						theDataSet1.probenames, nsamplespval, nmingo,
+						nmingolevel, szextraval, szcategoryIDval,
+						bspotincluded, szevidenceval, sztaxonval, bpontoval,
+						bcontoval, bfontoval, brandomgoval);
+
+				theDataSetsMerged.addExtraToFilter(theDataSetsMerged.tga);
+				return theDataSetsMerged;
+			}
+		} else {
+			
+			TSMiner_DataSet theDataSet1 = new TSMiner_DataSet(szexp1val, nmaxmissing,
+					dexpressedval, dmincorrelation, btakelog, bspotincluded,
+					false, badd0, bmaxminval, bfcto0, bfctopre, balltime);
+			
+			if (theDataSet1.numcols <= 1) {
+				theDataSet1 = new TSMiner_DataSet(theDataSet1.filterDuplicates(),
+						new TSMiner_GoAnnotations(szorganismsourceval,
+								szxrefsourceval, szxrefval, szgoval,
+								szgocategoryval, theDataSet1.genenames,
+								theDataSet1.probenames, nsamplespval, nmingo,
+								nmingolevel, szextraval, szcategoryIDval,
+								bspotincluded, szevidenceval, sztaxonval,
+								bpontoval, bcontoval, bfontoval, brandomgoval));
+				TSMiner_DataSet theDataSet1fm;
+				if (theDataSet1.numcols == 1) {
+					theDataSet1fm = new TSMiner_DataSet(theDataSet1.filterMissing1point(), theDataSet1.tga);
+					theDataSet1fm = new TSMiner_DataSet(theDataSet1fm.filtergenesthreshold1point(), theDataSet1fm.tga);
+				} else {
+					theDataSet1fm = theDataSet1;
+				}
+				return theDataSet1fm;
+			} else {
+				int numrepeats = repeatnames.size();
+
+				if (numrepeats > 0) {
+					TSMiner_DataSet[] repeatSets = new TSMiner_DataSet[numrepeats];
+					for (int nset = 0; nset < numrepeats; nset++) {
+						String szfile = (String) repeatnames.get(nset);
+
+						TSMiner_DataSet theOtherSet = new TSMiner_DataSet(szfile,
+								nmaxmissing, dexpressedval, dmincorrelation,
+								btakelog, bspotincluded, true, badd0,
+								bmaxminval, bfcto0, bfctopre, balltime);
+
+						errorcheck(theDataSet1, theOtherSet);
+
+						repeatSets[nset] = theOtherSet;
+					}
+					theDataSetsMerged = new TSMiner_DataSet(theDataSet1.mergeDataSets(repeatSets), theDataSet1.tga);
+				} else {
+					theDataSetsMerged = theDataSet1;
+				}
+
 				theDataSetsMerged = new TSMiner_DataSet(theDataSetsMerged.logratio2(), theDataSetsMerged.tga);
 				theDataSetsMerged = new TSMiner_DataSet(theDataSetsMerged.averageAndFilterDuplicates(), theDataSetsMerged.tga);
+				// gene values before averaging stored
 				theDataSetsMerged = new TSMiner_DataSet(theDataSetsMerged.filterMissing(), theDataSetsMerged.tga);
-				theDataSetsMerged = new TSMiner_DataSet(theDataSetsMerged.filtergenesthreshold2(), theDataSetsMerged.tga);			
-			} else {
-				throw new IllegalArgumentException(       
-						"There is only one time point in the time-series data.");
+				theDataSetsMerged = new TSMiner_DataSet(theDataSetsMerged.filtergenesthreshold2(), theDataSetsMerged.tga);
+
+				theDataSetsMerged.tga = new TSMiner_GoAnnotations(
+						szorganismsourceval, szxrefsourceval, szxrefval,
+						szgoval, szgocategoryval, theDataSet1.genenames,
+						theDataSet1.probenames, nsamplespval, nmingo,
+						nmingolevel, szextraval, szcategoryIDval,
+						bspotincluded, szevidenceval, sztaxonval, bpontoval,
+						bcontoval, bfontoval, brandomgoval);
 			}
+			theDataSetsMerged.addExtraToFilter(theDataSetsMerged.tga);
 
 			return theDataSetsMerged;
+		}
 	}
 
 	/**
@@ -1367,16 +1518,18 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 			String szorganismsourceval, String szxrefsourceval,
 			String szxrefval, String szexp1val, String szgoval,
 			String szgocategoryval, int nmaxmissing, double dexpressedval,
-			int nsamplespval, int nmingo, int nmingolevel, String szextraval, boolean balltime,
-			boolean btakelog, boolean bspotincluded, boolean badd0, String szcategoryIDval,
+			double dmincorrelation, int nsamplespval, int nmingo,
+			int nmingolevel, String szextraval, boolean balltime,
+			Vector<String> repeatnames, boolean btakelog,
+			boolean bspotincluded, boolean badd0, String szcategoryIDval,
 			String szevidenceval, String sztaxonval, boolean bpontoval,
 			boolean bcontoval, boolean bfontoval, boolean brandomgoval,
 			boolean bmaxminval, boolean bfcto0, boolean bfctopre) throws Exception {
 		DataSetCore theDataSetCoresMerged = null;
 
 		TSMiner_DataSet theDataSet1 = new TSMiner_DataSet(szexp1val, nmaxmissing,
-				dexpressedval, btakelog, bspotincluded,
-				false, badd0, bmaxminval, bfcto0, bfctopre);
+				dexpressedval, dmincorrelation, btakelog, bspotincluded,
+				false, badd0, bmaxminval, bfcto0, bfctopre, balltime);
 		DataSetCore theDataSet1Core = (DataSetCore) theDataSet1;
 		if (theDataSet1.numcols <= 1) {
 			theDataSet1Core = theDataSet1Core.filterDuplicates(); //去重
@@ -1390,12 +1543,63 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 			}
 			return theDataSet1fmCore;
 		}
-			
-		    theDataSetCoresMerged = theDataSet1Core;
+		
+		if (balltime) {  //如果重复实验文件夹下全部文件被选中
+			String[] origgenes = theDataSet1.genenames;
+			theDataSet1Core = theDataSet1Core.logratio2();
+			theDataSet1Core = theDataSet1Core.averageAndFilterDuplicates();
+			// genevalues in log ratio before averaging stored
+			// need for each gene duplicated
+			// a mutlidimensional array of time series for each occurence
+			int numrepeats = repeatnames.size();
+
+			if (numrepeats > 0) {
+				DataSetCore[] repeatSets = new DataSetCore[numrepeats];
+				for (int nset = 0; nset < numrepeats; nset++) {
+					String szfile = (String) repeatnames.get(nset);
+					TSMiner_DataSet theOtherSet = new TSMiner_DataSet(szfile,
+							nmaxmissing, dexpressedval, dmincorrelation,
+							btakelog, bspotincluded, true, badd0,
+							bmaxminval, bfcto0, bfctopre, balltime);
+					errorcheck(origgenes, theOtherSet.genenames,
+							theDataSet1.numcols, theOtherSet.numcols);
+					// compute log ratio of each time series first then
+					// merge
+					// normalize the data
+					DataSetCore theOtherSetCore = theOtherSet.logratio2();
+					theOtherSetCore = theOtherSetCore.averageAndFilterDuplicates();
+					// gene values in log ratio before averaging stored
+					repeatSets[nset] = theOtherSetCore;
+				}
+				theDataSetCoresMerged = theDataSet1Core.mergeDataSets(repeatSets);
+				theDataSetCoresMerged = theDataSetCoresMerged.filterdistprofiles(theDataSet1, repeatSets);
+			} else {
+				theDataSetCoresMerged = theDataSet1Core;
+			}
+			return theDataSetCoresMerged;
+		} else {
+			int numrepeats = repeatnames.size();
+
+			if (numrepeats > 0) {
+				DataSetCore[] repeatSets = new DataSetCore[numrepeats];
+				for (int nset = 0; nset < numrepeats; nset++) {
+					String szfile = (String) repeatnames.get(nset);
+						TSMiner_DataSet theOtherSet = new TSMiner_DataSet(szfile,
+							nmaxmissing, dexpressedval, dmincorrelation,
+							btakelog, bspotincluded, true, badd0,
+							bmaxminval, bfcto0, bfctopre, balltime);
+					errorcheck(theDataSet1, theOtherSet);
+					repeatSets[nset] = (DataSetCore)theOtherSet;
+				}
+				theDataSetCoresMerged = theDataSet1.mergeDataSets(repeatSets);
+			} else {
+				theDataSetCoresMerged = theDataSet1Core;
+			}
+
 			theDataSetCoresMerged = theDataSetCoresMerged.logratio2();
 			theDataSetCoresMerged = theDataSetCoresMerged.averageAndFilterDuplicates();
 			return theDataSetCoresMerged;
-		
+		}
 	}
 	
 	/**
@@ -1406,24 +1610,21 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 	public void clusterscript(
 			String szstaticFileval, String szgoFileval, String szxrefval, String szexp1val, String szgoval,
 			String szgocategoryval, String szmaxmissingval,
-			String szexpressedval, String szsamplepval, String szmingoval, String szmingolevelval,
-			String szextraval, boolean btakelog,
+			String szexpressedval, String szfilterthresholdval,
+			String szsamplepval, String szmingoval, String szmingolevelval,
+			String szextraval, boolean balltime, Vector<String> repeatnames,
+			Vector<String> mirnarepeatnames, boolean btakelog,
 			boolean bgetxref, boolean bgetgoann, boolean bspotincluded,
 			boolean badd0, String szcategoryIDval, String szinitfileval,
 			String szevidenceval, String sztaxonval, boolean bpontoval,
 			boolean bcontoval, boolean bfontoval, boolean brandomgoval,
 			boolean bmaxminval, boolean bfcto0, boolean bfctopre) throws Exception {
 		
-		/*
-		szstaticFileval = "D:/Personal issues/Liver_Regeneration/"
-				+ "TSMiner v.1.2/TF-gene file/Cellnet_tftg.txt";
-        szexp1val = "D:/Personal issues/Liver_Regeneration/"
-        		+ "TSMiner v.1.2/Time-series data/GSE95135.txt";
-        szgoFileval = "D:/Personal issues/Liver_Regeneration/"
-        		+ "TSMiner v.1.2/Gene annotation file/KEGG_pathway_mus.txt";
-        szinitfileval = "D:/Personal issues/Liver_Regeneration/TSMiner v.1.2/Saved model/savedmodel";
-		*/
-        
+		//szstaticFileval = "E:/2019工作/TSMiner v.1.2/TF-gene file/test.txt";
+        //szexp1val = "E:/2019工作/TSMiner v.1.2/Time-series data/test.txt";
+        //szgoFileval = "E:/2019工作/TSMiner v.1.2/Gene annotation file/KEGG_pathway_mus.txt";
+        //szinitfileval = "E:/2019工作/TSMiner v.1.2/Saved model/savedmodel";
+		
 		if (nexceptions == 0) {
 			if (szstaticFileval.trim().equals("")) {
 				throw new IllegalArgumentException(       
@@ -1490,6 +1691,28 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 						"Maximum missing values must be an integer");
 			}
 
+			for (int nrepeat = 0; nrepeat < repeatnames.size(); nrepeat++) {
+				if (!(new File((String) repeatnames.get(nrepeat))).exists()) {
+					throw new IllegalArgumentException("The repeat data file '"
+							+ repeatnames.get(nrepeat) + "' cannot be found");
+				}
+			}
+
+			for (int nrepeat = 0; nrepeat < mirnarepeatnames.size(); nrepeat++) {
+				if (!(new File((String) mirnarepeatnames.get(nrepeat)))
+						.exists()) {
+					throw new IllegalArgumentException("The repeat data file '"
+							+ mirnarepeatnames.get(nrepeat)
+							+ "' cannot be found");
+				}
+			}
+
+			double dmincorrelation = Double.parseDouble(szfilterthresholdval);
+			if ((dmincorrelation < -1.1) || (dmincorrelation > 1.1)) {
+				throw new IllegalArgumentException(
+						"Correlation Lower Bound for Filtering must be in [-1.1,1.1]");
+			}
+
 			double dexpressedval = Double.parseDouble(szexpressedval);
 			if (dexpressedval < -0.05) {
 				throw new IllegalArgumentException(
@@ -1524,27 +1747,29 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 			bendsearch = false;  //结束状态设置为不结束搜索
 			
 			
+			
+			
 			final TSMiner_DataSet rawDataSet = TSMiner_IO.buildset(
 					szorganismsourceval, szxrefsourceval, szxrefval, szexp1val,
 					szgoval, szgocategoryval, 0, 0,
-					nsamplespval, nmingo, nmingolevel,
-					szextraval, btakelog, bspotincluded,
+					0, nsamplespval, nmingo, nmingolevel,
+					szextraval, balltime, repeatnames, btakelog, bspotincluded,
 					badd0, szcategoryIDval, szevidenceval, sztaxonval,
 					bpontoval, bcontoval, bfontoval, brandomgoval, bmaxminval, bfcto0, bfctopre);
 			
 			final TSMiner_DataSet thefDataSetfmnel = TSMiner_IO.buildset(  //利用buildset方法处理timeseries得到数据集
 					szorganismsourceval, szxrefsourceval, szxrefval, szexp1val,
 					szgoval, szgocategoryval, nmaxmissing, dexpressedval,
-					nsamplespval, nmingo, nmingolevel, szextraval, 
-					btakelog, bspotincluded, badd0, szcategoryIDval, 
-					szevidenceval, sztaxonval, bpontoval, bcontoval, bfontoval, 
-					brandomgoval, bmaxminval, bfcto0, bfctopre);
+					dmincorrelation, nsamplespval, nmingo, nmingolevel,
+					szextraval, balltime, repeatnames, btakelog, bspotincluded,
+					badd0, szcategoryIDval, szevidenceval, sztaxonval,
+					bpontoval, bcontoval, bfontoval, brandomgoval, bmaxminval, bfcto0, bfctopre);
 
 			DataSetCore theMIRNADataSet = null;
 			//---------------------Search the model-----------------------//			
 			
 			TSMiner_Timeiohmm thetimehmm = null;
-			
+
 			thetimehmm = new TSMiner_Timeiohmm(rawDataSet, thefDataSetfmnel, szstaticFileval, szgoFileval,
 					sznumchildval, szseedval, bstaticcheckval, ballowmergeval, ninitsearchval,
 					npermutationval, szinitfileval, runtext, endSearchButton,
@@ -1552,8 +1777,8 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 					dnodekDEF, nKeyInputTypeDEF, dKeyInputXDEF, dpercentDEF,
 					currentButton, "", szminstddeval, enrichmentthreshold, dethreshold,
 					staticsourceArray[nstaticsourcecb], checkStatusTF,
-					checkStatusmiRNA, theMIRNADataSet, regScoreFile, 
-					dProbBindingFunctional, miRNAWeight, tfWeight);
+					checkStatusmiRNA, miRNAInteractionDataFile,
+					theMIRNADataSet, regScoreFile, dProbBindingFunctional, miRNAWeight, tfWeight);
 			
 			thetimehmm.traverse(thetimehmm.treeptr, 0, true);
 			thetimehmm.traverse(thetimehmm.treeptr, 0, false);
@@ -1678,7 +1903,17 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 				File file = fc.getSelectedFile();
 				orig1Field.setText(file.getAbsolutePath());
 			}
-		} else if (esource == fastaDataFileButton) {
+		} else if (esource == repeatButton) {
+			theRepeatList.setLocation(this.getX() + 75, this.getY() + 100);
+			theRepeatList.setVisible(true);
+		}  else if (esource == miRNARepeatButton) {
+			miRNARepeatList.setLocation(this.getX() + 75, this.getY() + 100);
+			// setModal forces the miRNA repeat dialog to appear as the top
+			// window
+			// and blocks focus from other windows
+			miRNARepeatList.setModal(true);
+			miRNARepeatList.setVisible(true);
+		}  else if (esource == fastaDataFileButton) {
 			int returnVal = fc.showOpenDialog(this);
 
 			if (returnVal == JFileChooser.APPROVE_OPTION) {
@@ -1721,13 +1956,14 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 			}
 			
 			
-			bstaticcheckval = false;
+			bstaticcheckval=false;
 			if(jc.isSelected())
 			{
 				bstaticcheckval=true;
 			}
 			
 			szmaxmissingval=j13.getValue().toString();
+			szfilterthresholdval=j14.getValue().toString();
 			szexpressval=j15.getValue().toString();
 
 			if (mmm1.isSelected()) {
@@ -1780,6 +2016,9 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 			szmingolevelval = 1+""; 
 			bspotincluded = false;
 			
+			balltime = theRepeatList.allButton.isSelected();
+			balltimemiRNA = miRNARepeatList.allButton.isSelected();
+			
 			this.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
 
 			nexceptions = 0;
@@ -1794,8 +2033,10 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 					try {
 						clusterscript(szstaticFileval, szgoFileval, szxrefval, szorig1val,
 								szgoval, szgocategoryval, szmaxmissingval,
-								szexpressval, szsamplepvalval, szmingoval, szmingolevelval,
-								szextraval, btakelog, bgetxref,
+								szexpressval, szfilterthresholdval,
+								szsamplepvalval, szmingoval, szmingolevelval,
+								szextraval, balltime, theRepeatList.data,
+								miRNARepeatList.data, btakelog, bgetxref,
 								bgetgoann, bspotincluded, badd0,
 								szcategoryIDval, szinitfileval, szevidenceval,
 								sztaxonval, bpontoval, bcontoval, bfontoval,
@@ -1862,8 +2103,22 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 					+"=============================================================================================="+"\n"
 					+ "#  Load TF-TG Interaction File:\n"
 					+ "File encodes the static TF-gene interaction predictions as "
-					+ "input to TSMiner. The file is a tab delmited text file that can be in a three column format.\n"
-					+ "The first column contains "
+					+ "input to TSMiner. The file is a tab delmited text file, that can be in one of "
+					+ "two formats. Either in a grid format or in a three column format.\n"
+					+ "The grid format file is as follows:\n"
+					+ "The first column of the file contains the gene identifier symbols. "
+					+ "The first row contains the TFs identifiers. "
+					+ "The first entry of the first row is a label for the gene symbol column. "
+					+ "Each remaining entry corresponds to the relationship between a TF and a "
+					+ "gene. Under a binary encoding an entry is 1 if the TF is predicted "
+					+ "to regulate the gene and 0 otherwise. If a three way encoding is used an entry is 1 if "
+					+ "the TF is predicted to activate the gene, -1 if it is predicted to repress "
+					+ "the gene and 0 otherwise. Below is portion of a sample TF-gene interaction input file\n\n"
+					+ "ID	ADR1	ARG80	ARG81	ARO80	BAS1	CAD1	CBF1\n"
+					+ "YAL053W	0	0	0	0	0	0	1\n"
+					+ "YAL054C	0	0	0	0	0	0	1\n"
+					+ "YAL055W	0	0	0	0	1	0	0\n\n"
+					+ "In the three column format the first column contains "
 					+ "the transcription factors, the second column "
 					+ "the regulated gene, and the third column input value. The first row is a header row "
 					+ "where the header of the first column must be 'TF' column, "
@@ -1899,16 +2154,8 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 					+ "Gene	0h	1h	3h	6h	12h\n"
 					+ "YAL053W	-0.027	0.158	0.169	0.193	-0.165\n"
 					+ "YAL054C	0.183	-0.068	-0.134	-0.252	0.177\n"
-					+ "YAL055W	-0.923	-0.51	-0.718	-0.512	-0.668"+"\n";
-			Util.renderDialog(this, szMessage, 50, 100);
-		}else if(esource == help2) {
-			szMessage = "#  Filter gene if it has no TF:\n"
-					+ "* If this box is checked then genes are filtered if they are not included in the "
-					+ "TF-gene interaction file.\n"
-					+ "* If this box is unchecked then genes not included in the file "
-					+ "are not filtered and are assumed "
-					+ "to have a '0' for every entry.\n"
-					+"============================================================================================="+"\n"
+					+ "YAL055W	-0.923	-0.51	-0.718	-0.512	-0.668"+"\n"
+					+"=============================================================================================="+"\n"
 					+"#  Normalization Method:\n"
 					+ "All time-series will be transformed to starts at 0. "
 					+ "This can be done in one of three ways based on the option selected to the left.  "
@@ -1926,13 +2173,29 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 					+ "a time point 0 experiment was "
 					+ "conducted, then the 'Normalize data' option should be selected.\n"
 					+ "*If the data is already in log space and no time point 0 experiment was "
-					+ "conducted, then the 'No normalization/add 0' option should be selected.\n"
-					+"============================================================================================="+"\n"
+					+ "conducted, then the 'No normalization/add 0' option should be selected.";
+			Util.renderDialog(this, szMessage, 50, 100);
+		}else if(esource == help2) {
+			szMessage = "#  Filter gene if it has no TF:\n"
+					+ "* If this box is checked then genes are filtered if they are not included in the "
+					+ "TF-gene interaction file.\n"
+					+ "* If this box is unchecked then genes not included in the file "
+					+ "are not filtered and are assumed "
+					+ "to have a '0' for every entry.\n"
+					+"=============================================================================================="+"\n"
 					+"#  Maximum number of missing values:\n"
 					+ "* A gene will be filtered if the number of time points for which there are no readings for the gene is "
 					+ "greater than this parameter.\n"
 					+ "* A gene will also be filtered if its expression value at the first time "
 					+ "point is missing and 'log normalize data' or 'normalize data' was selected as the data transformation.\n"
+					+"=============================================================================================="+"\n"
+					+"#  Minimum correlation between repeats:\n"
+					+ "This parameter only applies if there is repeat data over different time periods.\n"
+					+ "* If there are two repeat data sets, the correlation value of the gene's expression level "
+					+ "between the original and repeat must have "
+					+ "a correlation value above this parameter, otherwise the gene will be filtered.\n"
+					+ "* If there are three or more repeat sets, the mean pairwise correlation over all data sets "
+					+ "must have a correlation value above this parameter, otherwise the gene will be filtered.\n"
 					+"=============================================================================================="+"\n"
 					+"#  Minimum absolute expression change:\n"
 					+"After transformation (Log normalize data, Normalize data, or No Normalization/add 0), "
@@ -1978,9 +2241,9 @@ public class TSMiner_IO extends JFrame implements ActionListener {
 					+ "* If it is set to 'Start from' TSMiner will start its search from the model saved.\n"
 					+ "* If it is set to 'Do not use' then TSMiner will start model learning from a single chain.\n"
 					+"=============================================================================================="+"\n"
-					+ "#  Significance level of enrichment p-value and DE p-value:\n"
-					+ "The 'Significance level of enrichment p-value' specifies the threshold below which a TF significantly regulates the genes involved in a sub-path.\n"
-					+ "The 'Significance level of DE p-value' specifies the threshold below which a TF with significant enrichment q-value significantly up or down-regulates its targets.\n"
+					+ "#  Significance level of enrichment q-value and DE q-value:\n"
+					+ "The 'Significance level of enrichment q-value' specifies the threshold below which a TF significantly regulates the genes involved in a sub-path.\n"
+					+ "The 'Significance level of DE q-value' specifies the threshold below which a TF with significant enrichment q-value significantly up or down-regulates its targets.\n"
 					+"=============================================================================================="+"\n"
 					+ "#  Permutation test:\n"
 					+ "This option specifies the compared time points when calculating the differential expression scores in permutation test.\n"

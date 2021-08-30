@@ -39,6 +39,12 @@ public class DataSetCore {
 	public int nmaxmissing;
 
 	/**
+	 *Minimum average pairwise correlation a gene must have between full
+	 * repeats if bfullrepeat is true
+	 */
+	public double dmincorrelation;
+
+	/**
 	 *Number of rows in the data matrix. This corresponds to the number of
 	 * genes.
 	 */
@@ -165,7 +171,7 @@ public class DataSetCore {
 			int[][] pmavalues, String[] probenames, String[] genenames,
 			double dthresholdvalue, boolean btakelog, boolean bspotincluded,
 			boolean badd0, String[] dsamplemins, double[] sortedcorrvals,
-			int nmaxmissing, HashMap<String,String> htFiltered,
+			int nmaxmissing, double dmincorrelation, HashMap<String,String> htFiltered,
 			String szProbeHeader, String szGeneHeader, boolean bmaxminval, boolean bfcto0, boolean bfctopre,
 			String[] otherInputFiles, boolean bfullrepeat) {
 		this.otherInputFiles = otherInputFiles;
@@ -177,6 +183,7 @@ public class DataSetCore {
 		this.htFiltered = htFiltered;
 		this.szProbeHeader = szProbeHeader;
 		this.szGeneHeader = szGeneHeader;
+		this.dmincorrelation = dmincorrelation;
 		this.nmaxmissing = nmaxmissing;
 		this.genespottimedata = genespottimedata;
 		this.generepeatspottimedata = generepeatspottimedata;
@@ -209,6 +216,7 @@ public class DataSetCore {
 		this.bmaxminval = theDataSetCore.bmaxminval;
 		this.bfcto0 = theDataSetCore.bfcto0;
 		this.bfctopre = theDataSetCore.bfctopre;
+		this.dmincorrelation = theDataSetCore.dmincorrelation;
 		this.numrows = theDataSetCore.numrows;
 		this.numcols = theDataSetCore.numcols;
 		this.data = theDataSetCore.data;
@@ -229,13 +237,59 @@ public class DataSetCore {
 		this.szGeneHeader = theDataSetCore.szGeneHeader;
 	}
 
+	// //////////////////////////////////////////////////////////////////////////
+
+	/**
+	 *Add those genes from tga.extragenes that were filtered to thtFiltered
+	 */
+	public void addExtraToFilter(GoAnnotations tga) {
+
+		// first stores those genes not filtered
+		HashSet<String> htNotFiltered = new HashSet<String>();
+		if (genenames != null) {
+			for (int nrow = 0; nrow < genenames.length; nrow++) {
+				htNotFiltered.add(genenames[nrow]);
+			}
+		}
+
+		int nextrasize = tga.extragenes.size();
+		for (int nrow = 0; nrow < nextrasize; nrow++) {
+			String szextragene = (String) tga.extragenes.get(nrow);
+			if (!htNotFiltered.contains(szextragene)) {
+				// gene did not pass filter
+				String szProbe = (String) htFiltered.get(szextragene);
+				String szExtraProbe = (String) tga.extraprobes.get(nrow);
+				if (szProbe == null) {
+					// have not seen this gene yet adding its probe
+					htFiltered.put(szextragene, szExtraProbe);
+				} else {
+					// the pre-filtered file may contain the same spot ID as a
+					// gene that was filtered
+					// in which case we do not want to list the spot ID twice
+					StringTokenizer st = new StringTokenizer(szProbe, ";");
+					boolean bfound = false;
+					while ((st.hasMoreTokens()) && (!bfound)) {
+						if (szExtraProbe.equals((String) st.nextToken())) {
+							bfound = true;
+						}
+					}
+					if (!bfound) {
+						// probe is new adding it to the list of probes for the
+						// gene
+						htFiltered.put(szextragene, szProbe + ";"
+								+ szExtraProbe);
+					}
+				}
+			}
+		}
+	}
 
 	// /////////////////////////////////////////////////////////////////////////////////////////
 	/**
 	 *读存在szInputFile中的文件名对应的文件
 	 */
 	protected void dataSetReader(String szInputFile, int nmaxmissing,
-			double dthresholdvalue, boolean btakelog,
+			double dthresholdvalue, double dmincorrelation, boolean btakelog,
 			boolean bspotincluded, boolean brepeatset, boolean badd0)
 			throws IOException, FileNotFoundException, IllegalArgumentException {
 		htFiltered = new HashMap<String,String>();
@@ -498,8 +552,6 @@ public class DataSetCore {
 	}
 
 	// //////////////////////////////////////////////////////////////
-	
-	
 	/**
 	 *Filters those rows that have a missing value at the first time point
 	 */
@@ -577,6 +629,7 @@ public class DataSetCore {
 				indicies.add(new Integer(nrow));
 			}
 		}
+
 		return filtergenesgeneral(goodrow, ngoodrows, false);
 	}
 
@@ -704,7 +757,7 @@ public class DataSetCore {
 				generepeatspottimedata, genespottimepma, generepeatspottimepma,
 				data, pmavalues, probenames, genenames, dthresholdvalue,
 				btakelog, bspotincluded, badd0, dsamplemins, sortedcorrvals,
-				nmaxmissing, htFiltered, szProbeHeader,
+				nmaxmissing, dmincorrelation, htFiltered, szProbeHeader,
 				szGeneHeader, bmaxminval, bfcto0, bfctopre, otherInputFiles, bfullrepeat);
 	}
 
@@ -777,12 +830,56 @@ public class DataSetCore {
 				generepeatspottimedata, genespottimepma, generepeatspottimepma,
 				mergedata, mergepmavalues, probenames, genenames,
 				dthresholdvalue, btakelog, bspotincluded, badd0, dsamplemins,
-				sortedcorrvals, nmaxmissing, htFiltered,
+				sortedcorrvals, nmaxmissing, dmincorrelation, htFiltered,
 				szProbeHeader, szGeneHeader, bmaxminval, bfcto0, bfctopre, otherInputFiles,
 				bfullrepeat);
 
 		return mergedSet;
 
+	}
+
+	// //////////////////////////////////////////////////////////////////////////////
+	/**
+	 *Computes the average pairwise correlation between gene repeats stores it
+	 * in sortedcorrvals. Filters those genes which do not have a sortedcorrvals
+	 * exceeding dmincorrelation
+	 */
+	public DataSetCore filterdistprofiles(DataSetCore theDataSet1,
+			DataSetCore[] RepeatSet) {
+		int npairs = (RepeatSet.length + 1) * (RepeatSet.length) / 2;
+		double dweight = 1.0 / (double) npairs;
+		int ngoodrows = 0;
+		sortedcorrvals = new double[numrows];
+		boolean[] goodrow = new boolean[numrows];
+		for (int nrow = 0; nrow < sortedcorrvals.length; nrow++) {
+			sortedcorrvals[nrow] = 0;
+			for (int nrepeatset = 0; nrepeatset < RepeatSet.length; nrepeatset++) {
+				sortedcorrvals[nrow] += dweight
+						* Util.correlation(theDataSet1.data[nrow],
+								RepeatSet[nrepeatset].data[nrow],
+								theDataSet1.pmavalues[nrow],
+								RepeatSet[nrepeatset].pmavalues[nrow]);
+				for (int nrepeatset2 = nrepeatset + 1; nrepeatset2 < RepeatSet.length; nrepeatset2++) {
+					sortedcorrvals[nrow] += dweight
+							* Util.correlation(
+									RepeatSet[nrepeatset].data[nrow],
+									RepeatSet[nrepeatset2].data[nrow],
+									RepeatSet[nrepeatset].pmavalues[nrow],
+									RepeatSet[nrepeatset2].pmavalues[nrow]);
+				}
+			}
+
+			if (sortedcorrvals[nrow] > dmincorrelation) {
+				goodrow[nrow] = true;
+				ngoodrows++;
+			} else {
+				goodrow[nrow] = false;
+			}
+		}
+
+		Arrays.sort(sortedcorrvals);
+
+		return filtergenesgeneral(goodrow, ngoodrows, true);
 	}
 
 	// //////////////////////////////////////////////////////////////////////////////
@@ -855,7 +952,7 @@ public class DataSetCore {
 				filtergenerepeatspottimepma, filterdata, filterpmavalues,
 				filterprobenames, filtergenenames, dthresholdvalue, btakelog,
 				bspotincluded, badd0, dsamplemins, sortedcorrvals, nmaxmissing,
-				htFiltered, szProbeHeader, szGeneHeader,
+				dmincorrelation, htFiltered, szProbeHeader, szGeneHeader,
 				bmaxminval, bfcto0, bfctopre, otherInputFiles, bfullrepeat);
 	}
 
@@ -884,14 +981,14 @@ public class DataSetCore {
 		double dmin;
 		double dmaxfc20;
 		double dmaxfc2pre;
-		
-		
+
 		for (int nrow = 0; nrow < numrows; nrow++) {			
 			
 			dmax = 0;
 			dmin = 0;
 			dmaxfc20 = 0;
 			dmaxfc2pre=0;
+
 			for (int ncol = 1; ncol < numcols; ncol++) {
 				if(bmaxminval){
 					if ((pmavalues[nrow][ncol] > 0) && (data[nrow][ncol] > dmax)) {
@@ -919,7 +1016,7 @@ public class DataSetCore {
 				expressedrows[nrow] = false;
 			}
 		}
-		
+
 		return filtergenesgeneral(expressedrows, nabovethreshold, true);
 	}
 
